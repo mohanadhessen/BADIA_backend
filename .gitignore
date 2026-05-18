@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+
+# Environment variables
+.env
+.env.*
+*.env
+
+
+
+# logs
+*.log
+logs/
+
+
+.vscode/
+.idea/
+*.swp
+*.swo
