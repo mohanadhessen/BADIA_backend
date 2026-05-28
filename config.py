@@ -9,12 +9,19 @@ class Settings(BaseSettings):
     DB_NAME: str
     DB_PORT: int = 3306
 
-# --- Google OAuth Settings ---
+# Google OAuth Settings
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REDIRECT_URL: str
 
+# TOKEN SECRET_KEY
+    TOKEN_SECRET_KEY: str
 
+    RESEND_API_KEY:str
+    R2_ENDPOINT : str
+    R2_BUCKET : str
+    R2_ACCESS_KEY_ID : str
+    R2_SECRET_ACCESS_KEY : str
 
     class Config:
         env_file = ".env"

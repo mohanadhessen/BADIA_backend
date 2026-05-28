@@ -1,0 +1,48 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import datetime
+
+
+class UserRegister(BaseModel):
+    first_name: str
+    last_name: str
+    company_name: str
+    email: EmailStr
+    password: str
+    phone: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    remember_me: bool = False   # False → 30 min | True → 30 days
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    first_name: Optional[str]
+    last_name: Optional[str]
+
+    company_name: str
+    email: str
+    phone: Optional[str]
+    avatar_url: Optional[str]
+
+    role: str
+    auth_provider: str
+    is_email_verified: bool
+    is_active: bool
+
+    current_plan_id: Optional[int]
+    subscription_end_date: Optional[datetime]
+    created_at: Optional[datetime]
+
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
