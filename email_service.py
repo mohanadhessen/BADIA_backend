@@ -5,7 +5,7 @@ resend.api_key = settings.RESEND_API_KEY
 
 def send_verification_email(email: str, token: str):
     # Pro-tip: Eventually replace 127.0.0.1:8000 with your actual Frontend URL (e.g., settings.FRONTEND_URL)
-    verify_url = f"http://127.0.0.1:8000/auth/verify-email?token={token}"
+    verify_url = f"http://127.0.0.1:3000/verify_email_page.html?token={token}"
 
     html = f"""
     <div style="font-family: Arial, sans-serif; width: 100%; background-color: #f9f9f9; padding: 40px 0; text-align: center;">
@@ -41,7 +41,7 @@ def send_verification_email(email: str, token: str):
 
 
 def send_password_reset_email(email: str, token: str):
-    reset_url = f"http://127.0.0.1:8000/auth/reset-password?token={token}"
+    reset_url = f"http://127.0.0.1:3000/reset_password_page.html?token={token}"
 
     html = f"""
     <div style="font-family: Arial, sans-serif; width: 100%; background-color: #f9f9f9; padding: 40px 0; text-align: center;">

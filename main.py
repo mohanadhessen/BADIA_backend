@@ -10,7 +10,7 @@ from api.v1.auth.admin import router as admin_router
 
 from api.v1.users import router as users_router
 from api.v1.reviews import router as reviews_router
-from api.v1.user_files import router as file_router
+from api.v1.submit_request import router as file_router
 
 
 app = FastAPI(title="BADIA API")
@@ -20,7 +20,7 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
-    "https://main.dlipmljxomv0f.amplifyapp.com"
+    "https://badia-frontend.mohanadhessen.workers.dev/"
 ]
 
 app.add_middleware(

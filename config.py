@@ -31,13 +31,10 @@ class Settings(BaseSettings):
     @property
     def database_url(self):
         password = quote_plus(self.DB_PASSWORD)
-
+    
         return (
-            f"mysql+pymysql://{self.DB_USER}:"
-            f"{password}@"
-            f"{self.DB_HOST}:"
-            f"{self.DB_PORT}/"
-            f"{self.DB_NAME}"
+            f"mysql+pymysql://{self.DB_USER}:{password}"
+            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 
 

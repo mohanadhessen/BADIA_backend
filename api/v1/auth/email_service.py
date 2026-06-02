@@ -97,7 +97,7 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
             detail="User not found"
         )
 
-    user.password = hash_password(request.new_password)
+    user.password_hash = hash_password(request.new_password)
     db.commit()
 
     return {"message": "Password updated successfully"}

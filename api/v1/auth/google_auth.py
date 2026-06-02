@@ -45,7 +45,7 @@ def login_google():
 
 
 @router.get("/google/callback")
-async def auth_google_callback(request: Request, db: Session = Depends(get_db),remember_me: bool = True):
+async def auth_google_callback(request: Request, db: Session = Depends(get_db), remember_me: bool = True):
     code = request.query_params.get("code")
 
     if not code:
@@ -90,7 +90,6 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db),r
     if not email:
         raise HTTPException(status_code=400, detail="Google account missing email address")
 
-
     existing_user = get_user_by_email(db, email)
 
     if existing_user:
@@ -102,7 +101,7 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db),r
             db.refresh(existing_user)
         user = existing_user
     else:
-        # 5. Create the new OAuth user
+        # Create the new OAuth user
         user = create_new_user(
             db=db,
             email=email,
@@ -113,24 +112,28 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db),r
             auth_provider="google"
         )
 
+    # Prepare token payload
     token_payload = {
-        "sub": str(existing_user.id),
-        "email": existing_user.email,
-        "role": existing_user.role
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role
     }
 
-    google_access_token = create_access_token(data=token_payload)
+    # Generate backend application tokens
+    access_token = create_access_token(data=token_payload)
     refresh_token = create_refresh_token(data=token_payload, remember_me=remember_me)
     
-    return {
-        "status": "success",
-        "message": "User authenticated successfully",
-        "access_token": google_access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "first_name": user.first_name
-        }
-    }
+    # -------------------------------------------------------------------------
+    # FIXED: Redirect to Frontend Account Page instead of returning JSON
+    # -------------------------------------------------------------------------
+    # Replace this with your actual frontend URL (e.g., from your settings/config)
+    FRONTEND_ACCOUNT_URL = "http://127.0.0.1:3000/Signin.html"
+    
+    # Construct redirect URL appending tokens as query parameters
+    redirect_url = (
+        f"{FRONTEND_ACCOUNT_URL}"
+        f"?access_token={access_token}"
+        f"&refresh_token={refresh_token}"
+    )
+    
+    return RedirectResponse(url=redirect_url)

@@ -33,8 +33,8 @@ class UserProfileResponse(BaseModel):
     is_email_verified: bool
     is_active: bool
 
-    current_plan_id: Optional[int]
-    subscription_end_date: Optional[datetime]
+    current_plan_id: int | None = None
+    subscription_end_date: datetime | None = None
     created_at: Optional[datetime]
 
 

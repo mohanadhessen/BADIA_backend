@@ -1,12 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from schemas.user import UserUpdate
 from database.session import get_db 
 from api.dependencies import get_current_user
 from models.user import User
 from crud.user import update_user_data , delete_user
+from models.user_file import user_file
+from crud.request import get_request_by_id
+from config import settings
+from r2_client import s3
+
+R2_BUCKET = settings.R2_BUCKET
+
 router = APIRouter()
 router = APIRouter(tags=["Users"])
+
+
 
 
 @router.get("/me")
@@ -105,3 +115,37 @@ def delete_user_profile(
     }
 
 
+
+
+@router.get("/requests/{request_id}/files/{file_id}")
+def download_my_file(
+    request_id: int,
+    file_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    request = get_request_by_id(db=db, request_id=request_id)
+    if not request or request.user_id != current_user.id:
+        raise HTTPException(404, "Request not found")
+
+    db_file = db.query(user_file).filter(
+        user_file.file_id == file_id,
+        user_file.request_id == request_id
+    ).first()
+    if not db_file:
+        raise HTTPException(404, "File not found")
+
+    try:
+        presigned_url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": R2_BUCKET,
+                "Key": db_file.file_key,
+                "ResponseContentDisposition": f'attachment; filename="{db_file.filename}"',
+            },
+            ExpiresIn=300
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Could not generate download URL: {str(e)}")
+
+    return RedirectResponse(url=presigned_url)

@@ -36,7 +36,6 @@ def create_new_user(
         avatar_url=avatar_url,
         phone=phone,
         role="user",
-        current_plan_id=1,
         is_active=True,
         auth_provider=auth_provider,
         is_email_verified=True if auth_provider == "google" else False # Google emails are already verified

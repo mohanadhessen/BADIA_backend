@@ -14,15 +14,20 @@ router = APIRouter(tags=["Auth"])
 @router.post("/auth/login",response_model=TokenResponse)
 def login(user_in: LoginRequest, db: Session = Depends(get_db),remember_me: bool = True):
     existing_user = get_user_by_email(db, user_in.email)
-    if not existing_user or not verify_password(user_in.password, existing_user.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    if not existing_user:
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    
+    if not existing_user.password_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="This account uses Google sign-in. Please continue with Google."
+        )
+    
+    if not verify_password(user_in.password, existing_user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    
     if not existing_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user account")
-    
     token_payload = {
         "sub": str(existing_user.id),
         "email": existing_user.email,

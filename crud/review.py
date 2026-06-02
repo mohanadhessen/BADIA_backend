@@ -58,25 +58,6 @@ def update_review(db: Session, review_id: int, update_data: dict) -> Optional[Re
     return review
 
 
-def set_review_publish_status(
-    db: Session,
-    review_id: int,
-    is_published: bool
-) -> Optional[Review]:
-
-    review = get_review_by_id(db, review_id)
-
-    if not review:
-        return None
-
-    review.is_published = is_published
-
-    db.commit()
-    db.refresh(review)
-
-    return review
-
-
 
 def delete_review(db: Session, review_id: int) -> bool:
     review = get_review_by_id(db, review_id)

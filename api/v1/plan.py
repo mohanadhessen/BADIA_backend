@@ -9,10 +9,6 @@ import json
 
 router = APIRouter()
 
-# assumes you already have these
-# from db import get_db
-# from crud import get_all_plans, get_plans_cache_metadata
-
 
 def make_etag(plans):
     raw = json.dumps([p.id for p in plans], sort_keys=True)
