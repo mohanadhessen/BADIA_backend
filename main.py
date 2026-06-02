@@ -20,12 +20,12 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
-    "https://badia-frontend.mohanadhessen.workers.dev/"
+    "https://badia-frontend.mohanadhessen.workers.dev"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.workers\.dev",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
