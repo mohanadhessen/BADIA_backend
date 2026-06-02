@@ -1,15 +1,15 @@
-from pydantic import BaseModel , EmailStr
+from pydantic import BaseModel , EmailStr , ConfigDict
 from typing import Optional
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional, Literal , Any
+from decimal import Decimal
+
 class StatusUpdate(BaseModel):
     status: str
 
 
 class ReviewPublishUpdate(BaseModel):
     is_published: bool
-
-
 
 class AdminUserUpdateSchema(BaseModel):
     first_name: Optional[str] = None
@@ -29,3 +29,22 @@ class AdminUserUpdateSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PlanBase(BaseModel):
+    name: str
+    price_monthly: Decimal
+    price_yearly: Decimal
+    plan_details: Optional[dict[str, Any]] = None
+
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    price_monthly: Optional[Decimal] = None
+    price_yearly: Optional[Decimal] = None
+    plan_details: Optional[dict[str, Any]] = None
+
+
+class PlanResponse(PlanBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)

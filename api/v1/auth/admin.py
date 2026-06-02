@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends , HTTPException , status 
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from database.session import get_db
 from crud.admin import (
@@ -18,7 +19,8 @@ from r2_client import s3
 from config import settings
 from crud.request import get_request_by_id
 from models.user_file import user_file
-
+from schemas.plan import PlanUpdate, PlanResponse , PlanBase
+from crud.plan import get_plan_by_id, update_plan , get_plan_by_name , delete_plan , create_plan
 
 R2_BUCKET = settings.R2_BUCKET
 
@@ -186,13 +188,12 @@ def set_review_publish_status(
 
 
 
+
+
 @router.get("/requests/{request_id}/files/{file_id}")
-def download_request_file(
-    request_id: int,
-    file_id: str,
-    db: Session = Depends(get_db),
-):
+def download_request_file(request_id: int, file_id: str, db: Session = Depends(get_db)):
     request = get_request_by_id(db=db, request_id=request_id)
+
     if not request:
         raise HTTPException(404, "Request not found")
 
@@ -214,14 +215,17 @@ def download_request_file(
             },
             ExpiresIn=300
         )
-
     except Exception as e:
         raise HTTPException(500, f"Could not generate download URL: {str(e)}")
 
-    return {
+    return JSONResponse({
         "url": presigned_url,
         "filename": db_file.filename
-    }
+    })
+
+
+
+
 
 
 
@@ -271,3 +275,69 @@ def get_storage_usage():
     "usage_percent": round((total_gb / FREE_TIER_GB) * 100, 6),
     "total_files": total_files,
     }
+
+
+
+
+@router.post("/plans", response_model=PlanResponse, status_code=status.HTTP_201_CREATED)
+def create_new_plan(
+    plan_data: PlanBase,
+    db: Session = Depends(get_db),
+):
+    # prevent duplicate plan names
+    existing_plan = get_plan_by_name(db, plan_data.name)
+
+    if existing_plan:
+        raise HTTPException(
+            status_code=400,
+            detail="Plan name already exists"
+        )
+
+    plan = create_plan(
+        db=db,
+        data=plan_data.model_dump()
+    )
+
+    return plan
+
+
+
+@router.patch("/plans/{plan_id}", response_model=PlanResponse)
+def edit_plan(
+    plan_id: int,
+    plan_data: PlanUpdate,
+    db: Session = Depends(get_db),
+):
+    plan = get_plan_by_id(db, plan_id)
+
+    if not plan:
+        raise HTTPException(404, "Plan not found")
+
+    if (
+        plan_data.name and
+        plan_data.name != plan.name and
+        get_plan_by_name(db, plan_data.name)
+    ):
+        raise HTTPException(400, "Plan name already exists")
+
+    return update_plan(
+        db=db,
+        plan=plan,
+        data=plan_data.model_dump(exclude_unset=True)
+    )
+
+   
+@router.delete("/plans/{plan_id}")
+def delete_plan_by_id(  
+    plan_id: int,
+    db: Session = Depends(get_db)
+    ):
+    plan = get_plan_by_id(db, plan_id)
+    if not plan:
+        raise HTTPException(404, "Plan not found")
+    
+    delete_plan(db, plan)
+    
+    return {"message": "Plan deleted successfully"}
+
+   
