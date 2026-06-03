@@ -5,6 +5,7 @@ from database.session import get_db
 from crud.admin import (
     admin_get_all_users,
     admin_get_user_by_email,
+    get_users_plans_distribution,
     admin_get_all_requests,
     admin_get_all_review,
     admin_update_request_status,
@@ -46,6 +47,13 @@ def get_all_users(
         limit=limit,
         only_active=only_active
     )
+
+
+@router.get("/users/plan-distribution")
+def get_users_plan_distribution(db: Session = Depends(get_db)):
+    return get_users_plans_distribution(db)
+
+
 
 
 

@@ -47,6 +47,8 @@ def create_new_user(
     return new_user
 
 
+
+
 def update_user_data(db: Session, email: str, update_data: dict):
     db_user = get_user_by_email(db, email=email)
     if not db_user:
@@ -75,3 +77,5 @@ def delete_user(db: Session, email: str) -> bool:
     db.commit()
     db.refresh(db_user)
     return True
+
+

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from models.user import User
 from models.review import Review
 from models.request import Request
+from models.plan import Plan
 from sqlalchemy import func, case
 from crud.request import get_request_by_id
 from crud.review import get_review_by_id
@@ -84,6 +85,29 @@ def admin_get_all_users(
         "has_next": offset + limit < total_users,
         "items": users
     }
+
+
+
+def get_users_plans_distribution(db: Session):
+    results = (
+        db.query(
+            func.coalesce(Plan.name, "No Plan").label("plan"),
+            func.count(User.id).label("count")
+        )
+        .select_from(User)
+        .outerjoin(Plan, User.current_plan_id == Plan.id)
+        .group_by(Plan.id, Plan.name)
+        .all()
+    )
+
+    return [
+        {
+            "plan": row.plan,
+            "count": row.count
+        }
+        for row in results
+    ]
+
 
 
 
