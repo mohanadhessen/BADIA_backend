@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Response, Request
+from starlette.status import HTTP_304_NOT_MODIFIED
 from sqlalchemy.orm import Session
 from database.session import get_db 
 from crud.plan import  get_all_plans , get_plans_cache_metadata
@@ -11,7 +12,10 @@ router = APIRouter()
 
 
 def make_etag(plans):
-    raw = json.dumps([p.id for p in plans], sort_keys=True)
+    raw = json.dumps(
+    [(p.id, p.updated_at.isoformat()) for p in plans],
+    sort_keys=True
+)
     return hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -21,25 +25,25 @@ def list_plans(
     response: Response,
     db: Session = Depends(get_db)
 ):
-    plans = get_all_plans(db)
+    # ---- 1. Get lightweight cache metadata FIRST ----
+    meta = get_plans_cache_metadata(db)
+    etag = meta.get("etag")  # or computed/stored version
+    last_updated = meta.get("last_updated")
 
-    if not plans:
-        response.headers["Cache-Control"] = "public, max-age=60"
-        return []
-
-    # ---- ETag cache (main fix) ----
-    etag = make_etag(plans)
     client_etag = request.headers.get("if-none-match")
 
     if client_etag == etag:
-        return Response(status_code=304)
+        return Response(
+            status_code=HTTP_304_NOT_MODIFIED,
+            headers={
+                "ETag": etag,
+                "Cache-Control": "public, max-age=60",
+            }
+        )
 
+    plans = get_all_plans(db)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "public, max-age=60"
-
-    # ---- optional Last-Modified (backup compatibility) ----
-    meta = get_plans_cache_metadata(db)
-    last_updated = meta.get("last_updated")
 
     if last_updated:
         response.headers["Last-Modified"] = last_updated.strftime(
@@ -47,3 +51,5 @@ def list_plans(
         )
 
     return plans
+
+
