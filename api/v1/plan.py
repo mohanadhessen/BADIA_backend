@@ -11,12 +11,13 @@ import json
 router = APIRouter()
 
 
-def make_etag(plans):
-    raw = json.dumps(
-    [(p.id, p.updated_at.isoformat()) for p in plans],
-    sort_keys=True
-)
-    return hashlib.md5(raw.encode()).hexdigest()
+def make_etag(count: int, last_updated) -> str:
+    """Generates an ETag based on table metadata (count and last updated time)."""
+    if not count or not last_updated:
+        return "empty-db"
+    raw_state = f"{count}-{last_updated.isoformat()}"
+    return hashlib.md5(raw_state.encode()).hexdigest()
+
 
 
 @router.get("/", response_model=list[PlanResponse])
@@ -25,31 +26,37 @@ def list_plans(
     response: Response,
     db: Session = Depends(get_db)
 ):
-    # ---- 1. Get lightweight cache metadata FIRST ----
+    # 1. Fetch lightweight metadata
     meta = get_plans_cache_metadata(db)
-    etag = meta.get("etag")  # or computed/stored version
-    last_updated = meta.get("last_updated")
+    last_updated = meta["last_updated"]
+    
+    # 2. Generate ETag instantly
+    etag = make_etag(meta["count"], last_updated)
+    
+    client_etag = request.headers.get("if-none-match", "").strip('"')
 
-    client_etag = request.headers.get("if-none-match")
-
+    # 3. Check cache condition
     if client_etag == etag:
         return Response(
             status_code=HTTP_304_NOT_MODIFIED,
             headers={
-                "ETag": etag,
-                "Cache-Control": "public, max-age=60",
+                "ETag": f'"{etag}"',
+                # FORCE the browser to revalidate this 304 response next time too
+                "Cache-Control": "no-cache", 
             }
         )
 
+    # 4. Cache miss: Fetch full payload
     plans = get_all_plans(db)
-    response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "public, max-age=60"
-
+    
+    # 5. Attach headers and return
+    response.headers["ETag"] = f'"{etag}"'
+    # FORCE the browser to always check the server using ETags
+    response.headers["Cache-Control"] = "no-cache"
+    
     if last_updated:
         response.headers["Last-Modified"] = last_updated.strftime(
             "%a, %d %b %Y %H:%M:%S GMT"
         )
 
     return plans
-
-
