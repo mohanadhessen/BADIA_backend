@@ -286,7 +286,7 @@ def create_new_plan(
 ):
     # prevent duplicate plan names
     existing_plan = get_plan_by_name(db, plan_data.name)
-
+    
     if existing_plan:
         raise HTTPException(
             status_code=400,
