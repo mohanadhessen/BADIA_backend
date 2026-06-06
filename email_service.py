@@ -1,5 +1,6 @@
 import resend
 from config import settings
+from datetime import datetime , timezone
 
 resend.api_key = settings.RESEND_API_KEY
 
@@ -74,3 +75,33 @@ def send_password_reset_email(email: str, token: str):
         "subject": "Password Reset",
         "html": html
     })
+
+
+
+
+
+
+def sent_this_emails_metric():
+    response = resend.Emails.list()
+    now = datetime.now(timezone.utc)
+    MONTH_LIMIT = 3000
+    DAY_LIMIT = 300
+    daily_count = 0
+    monthly_count = 0
+
+    for e in response["data"]:
+        dt = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00"))
+
+        if dt.year == now.year and dt.month == now.month:
+            monthly_count += 1
+
+            if dt.date() == now.date():
+                daily_count += 1
+
+    return {
+        "daily_count": daily_count,
+        "monthly_count": monthly_count,
+        "day_limit": DAY_LIMIT,
+        "month_limit": MONTH_LIMIT
+    }
+

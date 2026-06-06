@@ -205,13 +205,27 @@ def admin_get_all_requests(
 
 
 
-def admin_delete_request(db: Session, request_id: str) -> bool:
+def admin_delete_request(db: Session, request_id: str):
     request = get_request_by_id(db, request_id)
     if not request:
-        return False
+        return None
+
+    files = request.files
+
     db.delete(request)
     db.commit()
-    return True
+
+    return files
+
+
+def delete_s3_file(s3_client, bucket: str, key: str):
+    if not key:
+        return
+
+    s3_client.delete_object(
+        Bucket=bucket,
+        Key=key
+    )
 
 
 

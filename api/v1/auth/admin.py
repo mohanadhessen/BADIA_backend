@@ -12,7 +12,8 @@ from crud.admin import (
     admin_delete_request,
     admin_delete_review,
     admin_set_review_publish_status,
-    admin_update_user_data
+    admin_update_user_data,
+    delete_s3_file
 )
 from ...dependencies import require_admin 
 from schemas.admin import StatusUpdate , ReviewPublishUpdate , AdminUserUpdateSchema
@@ -22,6 +23,7 @@ from crud.request import get_request_by_id
 from models.user_file import user_file
 from schemas.plan import PlanUpdate, PlanResponse , PlanBase
 from crud.plan import get_plan_by_id, update_plan , get_plan_by_name , delete_plan , create_plan
+from email_service import sent_this_emails_metric
 
 R2_BUCKET = settings.R2_BUCKET
 
@@ -138,20 +140,31 @@ def update_request_status(
 
 
 @router.delete("/requests/{request_id}")
-def delete_request(
-    request_id: str,
-    db: Session = Depends(get_db)
-):
-    success = admin_delete_request(db=db, request_id=request_id)
+def delete_request(request_id: str, db: Session = Depends(get_db)):
 
-    if not success:
+    request = get_request_by_id(db, request_id)
+
+    if not request:
         raise HTTPException(404, "Request not found")
+
+    # collect all file keys BEFORE DB delete
+    file_keys = [f.file_key for f in request.files if f.file_key]
+
+    for key in file_keys:
+        delete_s3_file(
+            s3_client=s3,
+            bucket=settings.R2_BUCKET,
+            key=key
+        )
+
+    db.delete(request)
+    db.commit()
 
     return {
         "message": "Request deleted successfully",
-        "request_id": request_id
+        "request_id": request_id,
+        "deleted_files": len(file_keys)
     }
-
 
 
 @router.delete("/reviews/{review_id}")
@@ -349,3 +362,8 @@ def delete_plan_by_id(
     return {"message": "Plan deleted successfully"}
 
    
+
+
+@router.get("/emails/sent-this-month")
+def get_email_count():
+    return sent_this_emails_metric()

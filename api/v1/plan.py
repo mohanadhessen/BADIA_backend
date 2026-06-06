@@ -8,7 +8,7 @@ import hashlib
 import json
 
 
-router = APIRouter()
+router = APIRouter(tags=["Plans"])
 
 
 def make_etag(count: int, last_updated) -> str:
