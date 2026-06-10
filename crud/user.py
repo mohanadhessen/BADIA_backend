@@ -1,13 +1,19 @@
 from models.user import User
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from models.plan import Plan
+from security import hash_password
+
+
 
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
-
+def get_user_by_id(db: Session, id: int) -> Optional[User]:
+    return db.query(User).filter(User.id == id).first()
 
 
 def create_new_user(
@@ -79,3 +85,102 @@ def delete_user(db: Session, email: str) -> bool:
     return True
 
 
+
+def admin_update_user_data(db: Session, email: str, update_data: dict) -> User:
+    user = db.query(User).filter(User.email == email).first()
+
+    if user:
+        for key, value in update_data.items():
+            if key == "password" and value:
+                user.password_hash = hash_password(value)
+            elif hasattr(user, key):
+                setattr(user, key, value)
+
+        db.commit()
+        db.refresh(user)
+
+    return user
+
+
+def admin_get_all_users(
+    db: Session,
+    page: int = 1,
+    limit: int = 25,
+    only_active: bool = False
+):
+    offset = (page - 1) * limit
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+
+    active_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_active == True)
+        .scalar() or 0
+    )
+
+    inactive_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_active == False)
+        .scalar() or 0
+    )
+
+    verified_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_email_verified == True)
+        .scalar() or 0
+    )
+
+    unverified_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_email_verified == False)
+        .scalar() or 0
+    )
+
+    query = db.query(User)
+
+    if only_active:
+        query = query.filter(User.is_active == True)
+
+    users = (
+        query
+        .order_by(User.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "metrics": {
+            "total_users": total_users,
+            "active_users": active_users,
+            "inactive_users": inactive_users,
+            "verified_users": verified_users,
+            "unverified_users": unverified_users
+        },
+        "page": page,
+        "limit": limit,
+        "has_next": offset + limit < total_users,
+        "items": users
+    }
+
+
+
+def get_users_plans_distribution(db: Session):
+    results = (
+        db.query(
+            func.coalesce(Plan.name, "No Plan").label("plan"),
+            func.count(User.id).label("count")
+        )
+        .select_from(User)
+        .outerjoin(Plan, User.current_plan_id == Plan.id)
+        .group_by(Plan.id, Plan.name)
+        .all()
+    )
+
+    return [
+        {
+            "plan": row.plan,
+            "count": row.count
+        }
+        for row in results
+    ]

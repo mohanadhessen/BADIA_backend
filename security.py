@@ -2,14 +2,14 @@ from pwdlib import PasswordHash
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 from config import settings
-from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
-from jose import jwt
+
 
 
 SECRET_KEY = settings.TOKEN_SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 
 pwd = PasswordHash.recommended()
 

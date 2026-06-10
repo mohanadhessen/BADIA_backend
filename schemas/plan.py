@@ -1,27 +1,24 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from decimal import Decimal
 
+class PlanDetail(BaseModel):
+    ar: str
+    en: str
+    enabled: bool
 
 class PlanBase(BaseModel):
     name: str
-    price_monthly: float
-    price_yearly: float
-    plan_details: Optional[List[Dict[str, Any]]] = None
-
-
-class PlanCreate(PlanBase):
-    pass
-
+    price_monthly: Decimal
+    price_yearly: Decimal
+    plan_details: Optional[list[PlanDetail]] = None
 
 class PlanUpdate(BaseModel):
     name: Optional[str] = None
-    price_monthly: Optional[float] = None
-    price_yearly: Optional[float] = None
-    plan_details: Optional[List[Dict[str, Any]]] = None
-
+    price_monthly: Optional[Decimal] = None
+    price_yearly: Optional[Decimal] = None
+    plan_details: Optional[list[PlanDetail]] = None
 
 class PlanResponse(PlanBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

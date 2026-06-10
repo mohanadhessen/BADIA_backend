@@ -16,3 +16,8 @@ class Plan(Base):
     
     users = relationship("User", back_populates="current_plan")
     payments = relationship("Payment", back_populates="plan")
+
+
+
+
+

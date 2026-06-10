@@ -1,6 +1,7 @@
 from models.review import Review
 from typing import Optional, List
 from sqlalchemy.orm import Session , joinedload
+from sqlalchemy import func
 
 
 def get_review_by_id(db: Session, review_id: int) -> Optional[Review]:
@@ -71,3 +72,63 @@ def delete_review(db: Session, review_id: int) -> bool:
 
 
 
+def admin_get_all_review(
+    db: Session,
+    page: int = 1,
+    limit: int = 25
+):
+    offset = (page - 1) * limit
+
+    total_reviews = db.query(func.count(Review.id)).scalar() or 0
+    published_reviews = (
+    db.query(func.count(Review.id))
+    .filter(Review.is_published == True)
+    .scalar() or 0
+    )
+    pending_reviews = (
+    db.query(func.count(Review.id))
+    .filter(Review.is_published == False)
+    .scalar() or 0
+        )
+    reviews = (
+        db.query(Review)
+        .options(
+            joinedload(Review.user)  
+
+        )
+        .order_by(Review.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "metrics": {
+            "total_reviews": total_reviews,
+            "published_reviews": published_reviews,
+            "pending_reviews": pending_reviews
+        },
+        "page": page,
+        "limit": limit,
+        "has_next": offset + limit < total_reviews,
+        "items": reviews}
+
+
+
+def admin_set_review_publish_status(
+    db: Session,
+    review_id: int,
+    is_published: bool
+) -> Optional[Review]:
+
+    review = get_review_by_id(db, review_id)
+
+    if not review:
+        return None
+
+    review.is_published = is_published
+
+    db.commit()
+    db.refresh(review)
+
+    return review

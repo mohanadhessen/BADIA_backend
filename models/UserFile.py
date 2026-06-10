@@ -4,8 +4,8 @@ from sqlalchemy.orm import relationship
 from database.base import Base
 
 
-class user_file(Base):
-    __tablename__ = "user_files"
+class UserFile(Base):
+    __tablename__ = "UserFile"
 
     id = Column(Integer, primary_key=True)
     request_id = Column(Integer, ForeignKey("requests.id"), nullable=False, index=True)

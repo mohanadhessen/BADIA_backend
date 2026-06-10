@@ -1,18 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database.session import get_db
 from schemas.user import LoginRequest
-from crud.user import get_user_by_email 
+from crud.user import get_user_by_email , get_user_by_id
 from security import  create_access_token , verify_password , create_refresh_token , verify_refresh_token
 from schemas.auth import TokenRefreshRequest, TokenResponse
+from api.rate_limiter import limiter
 
 
-router = APIRouter()
 router = APIRouter(tags=["Auth"])
 
 
 @router.post("/auth/login",response_model=TokenResponse)
-def login(user_in: LoginRequest, db: Session = Depends(get_db),remember_me: bool = True):
+@limiter.limit("5/minute")
+def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)):
     existing_user = get_user_by_email(db, user_in.email)
     if not existing_user:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
@@ -35,7 +36,7 @@ def login(user_in: LoginRequest, db: Session = Depends(get_db),remember_me: bool
     }
 
     access_token = create_access_token(data=token_payload)
-    refresh_token = create_refresh_token(token_payload, remember_me)
+    refresh_token = create_refresh_token(token_payload, user_in.remember_me)
     return {
         "access_token": access_token, 
         "token_type": "bearer",
@@ -45,11 +46,18 @@ def login(user_in: LoginRequest, db: Session = Depends(get_db),remember_me: bool
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_access_token(payload: TokenRefreshRequest):
+@limiter.limit("10/minute")
+def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Session = Depends(get_db)):
 
     decoded_data = verify_refresh_token(payload.refresh_token)
     user_id = decoded_data.get("sub")
-    
+
+    user = get_user_by_id(db, int(user_id))
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Inactive user account")
+
     new_payload = {
         "sub": str(user_id),
         "email": decoded_data.get("email"),

@@ -7,9 +7,9 @@ from crud.user import get_user_by_email , create_new_user
 from config import settings
 import httpx
 from security import create_access_token , create_refresh_token
+from api.rate_limiter import limiter
 
 
-router = APIRouter()
 
 router = APIRouter(tags=["OAuth"])
 
@@ -22,14 +22,14 @@ GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo"
 GOOGLE_CLIENT_ID     = settings.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = settings.GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URL  = settings.GOOGLE_REDIRECT_URL
-
-
+FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
 
 
 
 
 @router.get("/google")
-def login_google():
+@limiter.limit("10/minute")
+def login_google(request: Request):
 
     query_params = {
         "client_id":     GOOGLE_CLIENT_ID,
@@ -45,6 +45,7 @@ def login_google():
 
 
 @router.get("/google/callback")
+@limiter.limit("10/minute")
 async def auth_google_callback(request: Request, db: Session = Depends(get_db), remember_me: bool = True):
     code = request.query_params.get("code")
 
@@ -127,7 +128,7 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db), 
     # FIXED: Redirect to Frontend Account Page instead of returning JSON
     # -------------------------------------------------------------------------
     # Replace this with your actual frontend URL (e.g., from your settings/config)
-    FRONTEND_ACCOUNT_URL = "http://127.0.0.1:3000/Signin.html"
+
     
     # Construct redirect URL appending tokens as query parameters
     redirect_url = (

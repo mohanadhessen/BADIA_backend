@@ -54,7 +54,7 @@ class Request(Base):
 
     user = relationship("User", back_populates="requests")
     files = relationship(
-        "user_file",
+        "UserFile",
         back_populates="request",
         cascade="all, delete-orphan"
     )

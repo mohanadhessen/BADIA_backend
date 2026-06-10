@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from schemas.review import ReviewCreate  , ReviewUpdate
 from database.session import get_db 
 from api.dependencies import get_current_user
 from models.user import User
 from crud.review import   update_review , delete_review , get_review_by_id , create_review
+from api.rate_limiter import limiter
 
 
 
@@ -12,7 +13,9 @@ router = APIRouter(tags=["Reviews"])
 
 
 @router.post("")
+@limiter.limit("5/minute")
 def create_review_endpoint(
+    request: Request,
     data: ReviewCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -26,7 +29,9 @@ def create_review_endpoint(
     )
 
 @router.patch("/{review_id}")
+@limiter.limit("10/minute")
 def update_review_endpoint(
+    request: Request,
     review_id: int,
     data: ReviewUpdate,
     db: Session = Depends(get_db),
@@ -51,7 +56,9 @@ def update_review_endpoint(
 
 
 @router.delete("/{review_id}")
+@limiter.limit("10/minute")
 def delete_review_endpoint(
+    request: Request,
     review_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

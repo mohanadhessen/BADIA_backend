@@ -1,19 +1,32 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from api.rate_limiter import limiter
 from api.v1.auth.register import router as register_router
 from api.v1.auth.google_auth import router as google_router
 from api.v1.auth.login import router as login_router 
-from api.v1.auth.email_service import router as email_router
+from api.v1.auth.email_auth import router as email_router
 from api.v1.plan import router as plans_router
-from api.v1.auth.admin import router as admin_router
 
 from api.v1.users import router as users_router
 from api.v1.reviews import router as reviews_router
-from api.v1.submit_request import router as file_router
+from api.v1.requests import router as file_router
+
+from api.v1.admin.users import router as admin_users_router
+from api.v1.admin.reviews import router as admin_reviews_router
+from api.v1.admin.requests import router as admin_requests_router
+from api.v1.admin.plans import router as admin_plans_router
+from api.v1.admin.storage import router as admin_storage_router
+from api.v1.admin.payments import router as admin_notifications_router
 
 
 app = FastAPI(title="BADIA API")
+
+# SlowAPI rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 origins = [
     "http://localhost:3000",
@@ -33,14 +46,19 @@ app.add_middleware(
 )
 
 
-# Auth routes
 app.include_router(register_router, prefix="/api/v1")
 app.include_router(login_router, prefix="/api/v1")
-app.include_router(google_router, prefix="/auth")
+app.include_router(google_router, prefix="/api/v1/auth")
 app.include_router(users_router, prefix="/api/v1/users")
 app.include_router(reviews_router, prefix="/api/v1/reviews")
-app.include_router(email_router, prefix="/api/v1/email")
-app.include_router(plans_router,prefix="/api/v1/plans")
-app.include_router(admin_router,prefix="/api/v1/admin")
-app.include_router(file_router,prefix="/api/v1/files")
+app.include_router(email_router, prefix="/api/v1")
+app.include_router(plans_router, prefix="/api/v1/plans")
+app.include_router(file_router, prefix="/api/v1/files")
 
+# Admin routers (modular)
+app.include_router(admin_users_router, prefix="/api/v1/admin")
+app.include_router(admin_reviews_router, prefix="/api/v1/admin")
+app.include_router(admin_requests_router, prefix="/api/v1/admin")
+app.include_router(admin_plans_router, prefix="/api/v1/admin")
+app.include_router(admin_storage_router, prefix="/api/v1/admin")
+app.include_router(admin_notifications_router, prefix="/api/v1/admin")

@@ -1,26 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form, File, UploadFile , Request , Response
+from starlette.status import HTTP_304_NOT_MODIFIED
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from schemas.user import UserUpdate
 from database.session import get_db 
 from api.dependencies import get_current_user
 from models.user import User
-from crud.user import update_user_data , delete_user
-from models.user_file import user_file
-from crud.request import get_request_by_id
+from crud.user import update_user_data, delete_user
+from models.UserFile import UserFile
+from crud.request import get_request_by_id, delete_request, get_user_requests
 from config import settings
 from r2_client import s3
+import hashlib
+from api.rate_limiter import limiter
+
 
 R2_BUCKET = settings.R2_BUCKET
-
-router = APIRouter()
 router = APIRouter(tags=["Users"])
 
 
-
+def make_etag(last_updated) -> str:
+    raw_state = f"{last_updated.isoformat()}"
+    return hashlib.md5(raw_state.encode()).hexdigest()
 
 @router.get("/me")
-def get_user_profile(current_user: User = Depends(get_current_user)):
+@limiter.limit("60/minute")
+def get_user_profile(
+    request: Request,
+    response: Response,  
+    current_user: User = Depends(get_current_user)
+):
+
+    etag = make_etag(current_user.updated_at)
+
+    client_etag = request.headers.get("if-none-match", "").strip('"')
+    
+
+    cache_headers = {
+        "ETag": f'"{etag}"',
+        "Cache-Control": "no-cache",  
+    }
+
+    if client_etag == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=cache_headers
+        )
+        
+
+    response.headers.update(cache_headers)
+    
     return {
         "status": "success",
         "user_info": {
@@ -34,15 +63,91 @@ def get_user_profile(current_user: User = Depends(get_current_user)):
             "auth_provider": current_user.auth_provider,
             "role": current_user.role,
             "created_at": current_user.created_at,
-            "is_email_verified":current_user.is_email_verified
+            "is_email_verified": current_user.is_email_verified
         }
+    }
+
+
+@router.get("/me/requests")
+@limiter.limit("60/minute")
+def get_my_requests(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    # 1. Fetch the user's requests directly from the clean CRUD helper
+    requests = get_user_requests(db=db, user_id=current_user.id)
+    # 2. Format the list of requests and nested files smoothly
+    formatted_requests = []
+    for req in requests:
+        formatted_requests.append({
+            "id": req.id,
+            "service_type": req.service_type,
+            "status": req.status,
+            "created_at": req.created_at,
+            "files": [
+                {
+                    "file_id": f.file_id,
+                    "filename": f.filename,
+                    "created_at": f.created_at
+                }
+                for f in req.files
+            ] if req.files else []
+        })
+
+    # 3. Return the payload wrapped using your established success structure
+    return {
+        "status": "success",
+        "requests": formatted_requests
+    }
+
+
+@router.delete("/me/requests/{request_id}")
+@limiter.limit("10/minute")
+def delete_my_request(
+    request: Request,
+    request_id: int,  # Matches your standard request ID type
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    request = get_request_by_id(db=db, request_id=request_id)
+    
+    if not request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Request not found"
+        )
+        
+    # 2. Guard: Prevent users from deleting requests that belong to someone else
+    if request.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this request"
+        )
+
+    # 3. Trigger your CRUD function to drop storage objects and clear rows
+    deletion_result = delete_request(
+        db=db,
+        request_id=request_id,
+        s3=s3,
+        bucket=R2_BUCKET
+    )
+
+    return {
+        "status": "success",
+        "message": "Request and associated storage objects deleted successfully",
+        "details": deletion_result
     }
 
 
 
 
 @router.patch("/me")
+@limiter.limit("10/minute")
 def update_user_profile(
+    request: Request,
     user_data: UserUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -88,7 +193,9 @@ def update_user_profile(
 
 
 @router.delete("/me")
+@limiter.limit("3/minute")
 def delete_user_profile(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -118,7 +225,9 @@ def delete_user_profile(
 
 
 @router.get("/requests/{request_id}/files/{file_id}")
+@limiter.limit("30/minute")
 def download_my_file(
+    request: Request,
     request_id: int,
     file_id: str,
     db: Session = Depends(get_db),
@@ -128,9 +237,9 @@ def download_my_file(
     if not request or request.user_id != current_user.id:
         raise HTTPException(404, "Request not found")
 
-    db_file = db.query(user_file).filter(
-        user_file.file_id == file_id,
-        user_file.request_id == request_id
+    db_file = db.query(UserFile).filter(
+        UserFile.file_id == file_id,
+        UserFile.request_id == request_id
     ).first()
     if not db_file:
         raise HTTPException(404, "File not found")
@@ -148,4 +257,18 @@ def download_my_file(
     except Exception as e:
         raise HTTPException(500, f"Could not generate download URL: {str(e)}")
 
-    return RedirectResponse(url=presigned_url)
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse({
+        "url": presigned_url,
+        "filename": db_file.filename
+    })
+
+
+
+
+
+
+
+
+

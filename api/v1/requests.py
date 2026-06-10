@@ -1,0 +1,222 @@
+import uuid
+from typing import List
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+from database.session import get_db
+from ..dependencies import get_current_user
+from models import User  
+from crud.files import upload_to_r2 , update_files
+from crud.request import create_request, get_existing_request
+from r2_client import s3
+from config import settings
+from schemas.request import FeasibilityRequest 
+from schemas.FileResponse import FileResponse
+from crud.files import build_feasibility_pdf
+from api.rate_limiter import limiter
+
+
+R2_BUCKET = settings.R2_BUCKET
+
+router = APIRouter(tags=["files"])
+
+
+@router.post("/operational_partnership/submit")
+@limiter.limit("5/hour")
+def submit_operational_partnership(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    if get_existing_request(db, user.id, "operational_partnership"):
+        raise HTTPException(409, "You already have an operational partnership request")
+
+    if len(files) > 8:
+        raise HTTPException(400, "Maximum 8 PDFs allowed")
+
+    MAX_SIZE = 10 * 1024 * 1024
+    validated_files = []
+
+    for file in files:
+        if not file.filename:
+            raise HTTPException(400, "Empty file")
+        if not file.content_type or "pdf" not in file.content_type.lower():
+            raise HTTPException(400, "Only PDF allowed")
+
+        file.file.seek(0)
+        size = 0
+        for chunk in iter(lambda: file.file.read(1024 * 1024), b""):
+            size += len(chunk)
+            if size > MAX_SIZE:
+                raise HTTPException(413, f"{file.filename} is too large")
+
+        file.file.seek(0)
+        validated_files.append((file, size))
+
+    # Create request first
+    request = create_request(db=db, user_id=user.id, service_type="operational_partnership")
+
+    uploaded_files = []
+    try:
+        for file, size in validated_files:
+            file_id = str(uuid.uuid4())
+            file_key = f"{user.id}/{file_id}.pdf"
+
+            # Delegate upload and metadata logging to CRUD
+            db_file = upload_to_r2(
+                db=db,
+                s3=s3,
+                file_obj=file.file,
+                bucket_name=R2_BUCKET,
+                file_key=file_key,
+                filename=file.filename,
+                content_type=file.content_type,
+                size=size,
+                request_id=request.id,
+                file_id=file_id
+            )
+
+            uploaded_files.append({
+                "file_id": db_file.file_id,
+                "filename": db_file.filename,
+                "size": db_file.size,
+                "file_key": db_file.file_key
+            })
+
+    except Exception as e:
+        db.rollback()
+        db.delete(request)
+        db.commit()
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(500, f"Upload failed: {str(e)}")
+
+    return {
+        "message": "Files uploaded successfully",
+        "request_id": request.id,
+        "files": uploaded_files
+    }
+
+
+@router.post("/feasibility/submit")
+@limiter.limit("5/hour")
+def submit_feasibility_study(
+    request: Request,
+    payload: FeasibilityRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if get_existing_request(db, current_user.id, "feasibility_study"):
+        raise HTTPException(409, "You already have a feasibility study request")
+
+    request = create_request(
+        db=db,
+        user_id=current_user.id,
+        service_type="feasibility_study"
+    )
+
+    file_id = str(uuid.uuid4())
+
+    try:
+        # 1. generate PDF (replaces manual reportlab block)
+        pdf_buffer = build_feasibility_pdf(current_user, payload)
+        pdf_bytes = pdf_buffer.getvalue()
+
+        file_key = f"feasibility-studies/{current_user.id}/{file_id}.pdf"
+
+        # 2. upload to R2
+        created_file = upload_to_r2(
+            db=db,
+            s3=s3,
+            file_obj=pdf_buffer,
+            bucket_name=R2_BUCKET,
+            file_key=file_key,
+            filename=f"feasibility_study_{file_id}.pdf",
+            content_type="application/pdf",
+            size=len(pdf_bytes),
+            request_id=request.id,
+            file_id=file_id
+        )
+
+        return {
+            "status": "success",
+            "message": "Feasibility request submitted successfully",
+            "request_id": request.id,
+            "file_id": created_file.file_id,
+        }
+
+    except Exception as e:
+        db.delete(request)
+        db.commit()
+
+        if isinstance(e, HTTPException):
+            raise
+
+        raise HTTPException(500, f"Submission failed: {str(e)}")
+
+
+
+
+
+@router.put("/operational_partnership/files/{file_id}", response_model=FileResponse)
+@limiter.limit("10/hour")
+async def update_operational_partnership_file(
+    request: Request,
+    file_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file_bytes = await file.read()
+
+    try:
+        updated = update_files(
+            s3=s3,
+            bucket_name=settings.R2_BUCKET,
+            db_session=db,
+            file_id=file_id,
+            new_file_bytes=file_bytes,
+            new_filename=file.filename,
+            new_content_type=file.content_type,
+            user_id=current_user.id,
+        )
+    except Exception as e:
+        if str(e) == "Forbidden":
+            raise HTTPException(status_code=403, detail="You do not own this file")
+        if str(e) == "File not found":
+            raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return updated
+
+
+@router.put("/feasibility/files/{file_id}", response_model=FileResponse)
+@limiter.limit("10/hour")
+async def update_feasibility_file(
+    request: Request,
+    file_id: str,
+    payload: FeasibilityRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    pdf_buffer = build_feasibility_pdf(current_user, payload)
+    pdf_bytes = pdf_buffer.read()
+    try:
+        updated = update_files(
+            s3=s3,
+            bucket_name=settings.R2_BUCKET,
+            db_session=db,
+            file_id=file_id,
+            new_file_bytes=pdf_bytes,
+            new_filename="feasibility_study.pdf",
+            new_content_type="application/pdf",
+            user_id=current_user.id
+        )
+    except Exception as e:
+        if str(e) == "Forbidden":
+            raise HTTPException(status_code=403, detail="You do not own this file")
+        if str(e) == "File not found":
+            raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return updated

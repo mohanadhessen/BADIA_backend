@@ -1,12 +1,18 @@
-from pydantic import BaseModel , EmailStr , ConfigDict
+from pydantic import BaseModel , EmailStr 
 from typing import Optional
-from datetime import datetime
-from typing import Optional, Literal , Any
-from decimal import Decimal
+from typing import Optional 
+from enum import Enum
+from pydantic import BaseModel
+
+
+class RequestStatus(str, Enum):
+    APPROVED = "approved"
+    PENDING = "pending"
+    REJECTED = "rejected"
+
 
 class StatusUpdate(BaseModel):
-    status: str
-
+    status: RequestStatus
 
 class ReviewPublishUpdate(BaseModel):
     is_published: bool
@@ -17,13 +23,8 @@ class AdminUserUpdateSchema(BaseModel):
     company_name: Optional[str] = None
     email: Optional[EmailStr] = None
     password_hash: Optional[str] = None
-    google_id: Optional[str] = None
-    avatar_url: Optional[str] = None
-    auth_provider: Optional[Literal["local", "google"]] = None
     is_email_verified: Optional[bool] = None
     current_plan_id: Optional[int] = None
-    subscription_end_date: Optional[datetime] = None
-    role: Optional[Literal["user", "admin"]] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -31,20 +32,3 @@ class AdminUserUpdateSchema(BaseModel):
         from_attributes = True
 
 
-class PlanBase(BaseModel):
-    name: str
-    price_monthly: Decimal
-    price_yearly: Decimal
-    plan_details: Optional[dict[str, Any]] = None
-
-
-class PlanUpdate(BaseModel):
-    name: Optional[str] = None
-    price_monthly: Optional[Decimal] = None
-    price_yearly: Optional[Decimal] = None
-    plan_details: Optional[dict[str, Any]] = None
-
-
-class PlanResponse(PlanBase):
-    id: int
-    model_config = ConfigDict(from_attributes=True)

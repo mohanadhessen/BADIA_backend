@@ -5,7 +5,7 @@ from database.session import get_db
 from crud.plan import  get_all_plans , get_plans_cache_metadata
 from schemas.plan import PlanResponse
 import hashlib
-import json
+from api.rate_limiter import limiter
 
 
 router = APIRouter(tags=["Plans"])
@@ -21,6 +21,7 @@ def make_etag(count: int, last_updated) -> str:
 
 
 @router.get("/", response_model=list[PlanResponse])
+@limiter.limit("60/minute")
 def list_plans(
     request: Request,
     response: Response,
