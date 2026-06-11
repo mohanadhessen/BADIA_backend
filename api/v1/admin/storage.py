@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
+from api.etag import compute_etag, check_etag
 from r2_client import s3
 from config import settings
 from email_service import get_emails_metric
@@ -32,7 +33,7 @@ def get_bucket_storage_usage(s3, bucket_name):
 
 @router.get("/storage/usage")
 @limiter.limit("10/minute")
-def get_storage_usage(request: Request):
+def get_storage_usage(request: Request, response: Response):
     paginator = s3.get_paginator("list_objects_v2")
 
     total_bytes = 0
@@ -47,7 +48,7 @@ def get_storage_usage(request: Request):
 
     FREE_TIER_GB = 10  
 
-    return {
+    data = {
         "used_bytes": total_bytes,
         "used_kb": round(total_bytes / 1024, 2),
         "used_mb": round(total_bytes / (1024 ** 2), 4),
@@ -56,8 +57,17 @@ def get_storage_usage(request: Request):
         "usage_percent": round((total_gb / FREE_TIER_GB) * 100, 6),
         "total_files": total_files,
     }
+    
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 @router.get("/emails/sent-this-month")
 @limiter.limit("10/minute")
-def get_email_count(request: Request):
-    return get_emails_metric()
+def get_email_count(request: Request, response: Response):
+    data = get_emails_metric()
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data

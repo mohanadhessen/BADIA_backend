@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
+from api.etag import compute_etag, check_etag
 from crud.user import (
     admin_get_all_users,
     get_user_by_email,
@@ -24,23 +25,32 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_users(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
     only_active: bool = False,
     db: Session = Depends(get_db)
 ):
-    return admin_get_all_users(
+    data = admin_get_all_users(
         db=db,
         page=page,
         limit=limit,
         only_active=only_active
     )
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 
 @router.get("/users/plan-distribution")
 @limiter.limit("60/minute")
-def get_users_plan_distribution(request: Request, db: Session = Depends(get_db)):
-    return get_users_plans_distribution(db)
+def get_users_plan_distribution(request: Request, response: Response, db: Session = Depends(get_db)):
+    data = get_users_plans_distribution(db)
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 
 
@@ -75,6 +85,7 @@ def update_user_data(
 @limiter.limit("60/minute")
 def get_user_endpoint(
     request: Request,
+    response: Response,
     user_id: int | None = None,
     email: str | None = None,
     db: Session = Depends(get_db)
@@ -96,4 +107,7 @@ def get_user_endpoint(
             detail="User not found"
         )
 
+    etag = compute_etag(user)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
     return user

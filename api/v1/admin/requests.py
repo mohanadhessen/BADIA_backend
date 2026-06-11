@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
+from api.etag import compute_etag, check_etag
 from crud.request import get_request_by_id, delete_request, admin_get_all_requests, update_request_status
 from email_service import send_request_status_email
 from schemas.admin import StatusUpdate
@@ -23,15 +24,20 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_requests(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
-    return admin_get_all_requests(
+    data = admin_get_all_requests(
         db=db,
         page=page,
         limit=limit
     )
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 @router.patch("/requests/{request_id}/status")
 @limiter.limit("30/minute")

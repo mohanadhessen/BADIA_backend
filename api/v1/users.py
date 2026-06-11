@@ -19,9 +19,8 @@ R2_BUCKET = settings.R2_BUCKET
 router = APIRouter(tags=["Users"])
 
 
-def make_etag(last_updated) -> str:
-    raw_state = f"{last_updated.isoformat()}"
-    return hashlib.md5(raw_state.encode()).hexdigest()
+from api.etag import compute_etag, check_etag
+
 
 @router.get("/me")
 @limiter.limit("60/minute")
@@ -30,27 +29,7 @@ def get_user_profile(
     response: Response,  
     current_user: User = Depends(get_current_user)
 ):
-
-    etag = make_etag(current_user.updated_at)
-
-    client_etag = request.headers.get("if-none-match", "").strip('"')
-    
-
-    cache_headers = {
-        "ETag": f'"{etag}"',
-        "Cache-Control": "no-cache",  
-    }
-
-    if client_etag == etag:
-        return Response(
-            status_code=status.HTTP_304_NOT_MODIFIED,
-            headers=cache_headers
-        )
-        
-
-    response.headers.update(cache_headers)
-    
-    return {
+    data = {
         "status": "success",
         "user_info": {
             "id": current_user.id,
@@ -66,19 +45,22 @@ def get_user_profile(
             "is_email_verified": current_user.is_email_verified
         }
     }
+    
+    etag = compute_etag(current_user)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 
 @router.get("/me/requests")
 @limiter.limit("60/minute")
 def get_my_requests(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
-    # 1. Fetch the user's requests directly from the clean CRUD helper
     requests = get_user_requests(db=db, user_id=current_user.id)
-    # 2. Format the list of requests and nested files smoothly
     formatted_requests = []
     for req in requests:
         formatted_requests.append({
@@ -96,12 +78,16 @@ def get_my_requests(
             ] if req.files else []
         })
 
-    # 3. Return the payload wrapped using your established success structure
-    return {
+    data = {
         "status": "success",
         "requests": formatted_requests
     }
-
+    
+    # Calculate etag based on requests list (so any changes inside reflect)
+    etag = compute_etag(requests)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 @router.delete("/me/requests/{request_id}")
 @limiter.limit("10/minute")

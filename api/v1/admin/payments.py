@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Response
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
+from api.etag import compute_etag, check_etag
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
 from crud.payment import create_payment, update_payment_status, admin_get_all_payments
@@ -24,21 +25,26 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_payments(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
     status: str | None = None,
     db: Session = Depends(get_db)
 ):
-    return admin_get_all_payments(
+    data = admin_get_all_payments(
         db=db,
         page=page,
         limit=limit,
         status=status
     )
+    etag = compute_etag(data)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
 
 
 
-@router.post("")
+@router.post("/payments")
 def create_new_payment(
     data: PaymentBase,
     background_tasks: BackgroundTasks,
@@ -66,7 +72,7 @@ def create_new_payment(
         
     return {"message": "Payment created successfully", "payment_id": payment.id}
 
-@router.patch("/{payment_id}/status")
+@router.patch("/payments/{payment_id}/status")
 def update_payment(
     payment_id: int,
     data: PaymentStatusUpdate,
