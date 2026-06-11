@@ -8,6 +8,19 @@ from datetime import datetime
 
 
 
+def get_payment_by_user_id(
+    db: Session,
+    user_id: int,
+    status: str | None = None  
+):
+    query = db.query(Payment).filter(Payment.user_id == user_id)
+
+    if status:
+        query = query.filter(Payment.status == status)
+
+    return query.order_by(Payment.created_at.desc()).all()
+    
+
 def create_payment(db: Session, data: PaymentBase, billing_cycle: str):
     user = db.query(User).filter(User.id == data.user_id).first()
     if not user:
