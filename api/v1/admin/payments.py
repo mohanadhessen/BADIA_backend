@@ -5,7 +5,7 @@ from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
-from crud.payment import create_payment, update_payment_status, get_payments_telemetry
+from crud.payment import create_payment, update_payment_status, admin_get_all_payments
 from email_service import send_plan_update_email , send_plan_cancelled_by_admin_email
 from schemas.payment import PaymentBase
 from pydantic import BaseModel
@@ -19,9 +19,24 @@ router = APIRouter(
     dependencies=[Depends(require_admin)]
 )
 
-@router.get("/telemetry")
-def get_telemetry(db: Session = Depends(get_db)):
-    return get_payments_telemetry(db)
+
+@router.get("/payments")
+@limiter.limit("60/minute")
+def get_all_payments(
+    request: Request,
+    page: int = 1,
+    limit: int = 25,
+    status: str | None = None,
+    db: Session = Depends(get_db)
+):
+    return admin_get_all_payments(
+        db=db,
+        page=page,
+        limit=limit,
+        status=status
+    )
+
+
 
 @router.post("")
 def create_new_payment(

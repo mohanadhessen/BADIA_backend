@@ -8,6 +8,7 @@ from crud.user import (
     get_user_by_email,
     get_users_plans_distribution,
     admin_update_user_data,
+    get_user_by_id
 )
 from schemas.admin import AdminUserUpdateSchema
 
@@ -70,10 +71,29 @@ def update_user_data(
 
 
 
-@router.get("/users/by-email")
+@router.get("/user")
 @limiter.limit("60/minute")
-def get_user_by_email_endpoint(request: Request, email: str, db: Session = Depends(get_db)):
-    user = get_user_by_email(db, email)
+def get_user_endpoint(
+    request: Request,
+    user_id: int | None = None,
+    email: str | None = None,
+    db: Session = Depends(get_db)
+):
+    if user_id is None and email is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Either user_id or email is required"
+        )
+
+    if user_id is not None:
+        user = get_user_by_id(db, user_id)
+    else:
+        user = get_user_by_email(db, email)
+
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
     return user
