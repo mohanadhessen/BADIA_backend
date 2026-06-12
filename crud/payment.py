@@ -72,6 +72,8 @@ def update_payment(
     if not payment:
         raise ValueError("Payment not found")
 
+    previous_status = payment.status
+
     update_data = data.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():
@@ -82,16 +84,19 @@ def update_payment(
                 value = getattr(value, "status")
         setattr(payment, field, value)
 
-    if payment.status == "paid":
-        user = db.query(User).filter(User.id == payment.user_id).first()
-        if user:
+    user = db.query(User).filter(User.id == payment.user_id).first()
+
+    if user:
+        if payment.status == "paid":
             user.current_plan_id = payment.plan_id
+
+        elif payment.status in ["canceled", "rejected"]:
+            user.current_plan_id = None
 
     db.commit()
     db.refresh(payment)
 
     return payment
-
 
 
 
@@ -146,14 +151,14 @@ def admin_get_all_payments(
 
     total_revenue = (
         db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.status == "paid")
+        .filter(Payment.status.in_(["paid", "canceled"]))
         .scalar()
     )
 
     revenue_this_month = (
         db.query(func.coalesce(func.sum(Payment.amount), 0))
         .filter(
-            Payment.status == "paid",
+            Payment.status.in_(["paid", "canceled"]),
             Payment.created_at >= month_start
         )
         .scalar()
@@ -161,7 +166,7 @@ def admin_get_all_payments(
 
     average_payment_amount = (
         db.query(func.coalesce(func.avg(Payment.amount), 0))
-        .filter(Payment.status == "paid")
+        .filter(Payment.status.in_(["paid", "canceled"]))
         .scalar()
     )
 
