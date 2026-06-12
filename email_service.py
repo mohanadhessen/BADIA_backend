@@ -5,7 +5,6 @@ from datetime import datetime,timezone
 resend.api_key = settings.RESEND_API_KEY
 
 def send_verification_email(email: str, token: str):
-    # Pro-tip: Eventually replace 127.0.0.1:8000 with your actual Frontend URL (e.g., settings.FRONTEND_URL)
     verify_url = f"http://127.0.0.1:3000/verify_email_page.html?token={token}"
 
     html = f"""

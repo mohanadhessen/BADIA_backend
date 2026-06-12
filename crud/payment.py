@@ -3,7 +3,7 @@ from models.user import User
 from models.plan import Plan
 from sqlalchemy.orm import Session , joinedload
 from sqlalchemy import func
-from schemas.payment import PaymentBase
+from schemas.payment import PaymentBase , PaymentUpdate
 from datetime import datetime
 
 
@@ -58,28 +58,39 @@ def create_payment(db: Session, data: PaymentBase, billing_cycle: str):
 
 
 
-def update_payment_status(db: Session, payment_id: int, status: str):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+def update_payment(
+    db: Session,
+    payment_id: int,
+    data: PaymentUpdate
+):
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
 
     if not payment:
         raise ValueError("Payment not found")
 
-    allowed_statuses = {"paid", "rejected", "canceled"}
-    if status not in allowed_statuses:
-        raise ValueError("Invalid status")
+    update_data = data.model_dump(exclude_unset=True)
 
-    payment.status = status
+    for field, value in update_data.items():
+        if field == "status":
+            if isinstance(value, dict) and "status" in value:
+                value = value["status"]
+            elif hasattr(value, "status"):
+                value = getattr(value, "status")
+        setattr(payment, field, value)
 
-    if status == "paid":
+    if payment.status == "paid":
         user = db.query(User).filter(User.id == payment.user_id).first()
         if user:
-            user.plan_id = payment.plan_id
+            user.current_plan_id = payment.plan_id
 
     db.commit()
     db.refresh(payment)
 
     return payment
-
 
 
 

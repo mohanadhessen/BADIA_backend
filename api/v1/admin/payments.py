@@ -6,13 +6,11 @@ from api.rate_limiter import limiter
 from api.etag import compute_etag, check_etag
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
-from crud.payment import create_payment, update_payment_status, admin_get_all_payments , get_payment_by_user_id
+from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id
 from email_service import send_plan_update_email , send_plan_cancelled_by_admin_email
-from schemas.payment import PaymentBase
-from pydantic import BaseModel
+from schemas.payment import PaymentBase , PaymentUpdate
 
-class PaymentStatusUpdate(BaseModel):
-    status: str
+
 
 router = APIRouter(
     prefix="",
@@ -77,18 +75,21 @@ def create_new_payment(
             billing_cycle=payment.billing_cycle,
             transaction_id=str(payment.id)
         )
-
     return {"message": "Payment created successfully", "payment_id": payment.id}
 
-@router.patch("/payments/{payment_id}/status")
-def update_payment(
+@router.patch("/payments/{payment_id}")
+def update_payment_endpoint(
     payment_id: int,
-    data: PaymentStatusUpdate,
+    data: PaymentUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     try:
-        payment = update_payment_status(db=db, payment_id=payment_id, status=data.status)
+        payment = update_payment(
+            db=db,
+            payment_id=payment_id,
+            data=data
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -112,7 +113,7 @@ def update_payment(
                 transaction_id=str(payment.id),
             )
 
-        elif payment.status == "canceled":
+        elif payment.status in {"canceled", "rejected"}:
             background_tasks.add_task(
                 send_plan_cancelled_by_admin_email,
                 email=user.email,
@@ -121,7 +122,7 @@ def update_payment(
             )
 
     return {
-        "message": "Payment status updated successfully",
+        "message": "Payment updated successfully",
         "payment_id": payment.id,
         "status": payment.status,
     }
