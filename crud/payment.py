@@ -163,11 +163,7 @@ def admin_get_all_payments(
         .scalar()
     )
 
-    average_payment_amount = (
-        db.query(func.coalesce(func.avg(Payment.amount), 0))
-        .filter(Payment.status.in_(["paid", "canceled"]))
-        .scalar()
-    )
+
 
     query = (
         db.query(Payment)
@@ -204,7 +200,6 @@ def admin_get_all_payments(
             "payments_this_month": payments_this_month,
             "total_revenue": float(total_revenue),
             "revenue_this_month": float(revenue_this_month),
-            "average_payment_amount": round(float(average_payment_amount), 2)
         },
         "page": page,
         "limit": limit,
