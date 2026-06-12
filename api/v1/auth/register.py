@@ -5,6 +5,8 @@ from schemas.user import UserRegister
 from crud.user import get_user_by_email , create_new_user
 from security import hash_password , create_access_token
 from api.rate_limiter import limiter
+from email_tokens import create_email_verification_token
+from email_service import send_verification_email
 
 
 
@@ -30,6 +32,14 @@ def register_company(request: Request, user_in: UserRegister, db: Session = Depe
             password=hash_password(user_in.password),
             phone=user_in.phone,
         )
+
+        try:
+            token = create_email_verification_token(new_user.email)
+            send_verification_email(new_user.email, token)
+        except Exception as e:
+            # We don't want to crash registration if email fails
+            print(f"Warning: Could not send verification email to {new_user.email}: {e}")
+
         token_payload = {
             "sub": str(new_user.id),
             "email": new_user.email,

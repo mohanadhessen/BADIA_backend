@@ -1,17 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, File, UploadFile , Request , Response
-from starlette.status import HTTP_304_NOT_MODIFIED
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request , Response
 from sqlalchemy.orm import Session
-from schemas.user import UserUpdate
+from schemas.user import UserUpdate, UserPasswordReset
 from database.session import get_db 
 from api.dependencies import get_current_user
 from models.user import User
-from crud.user import update_user_data, delete_user
+from crud.user import update_user_data, delete_user, update_user_password
+from security import verify_password, hash_password
 from models.UserFile import UserFile
 from crud.request import get_request_by_id, delete_request, get_user_requests
 from config import settings
 from r2_client import s3
-import hashlib
 from api.rate_limiter import limiter
 
 
@@ -208,6 +206,33 @@ def delete_user_profile(
     }
 
 
+@router.post("/me/password")
+@limiter.limit("5/minute")
+def reset_user_password(
+    request: Request,
+    password_data: UserPasswordReset,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.password_hash or not verify_password(password_data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password"
+        )
+
+    new_hash = hash_password(password_data.new_password)
+    success = update_user_password(db, current_user.email, new_hash)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not update password"
+        )
+
+    return {
+        "status": "success",
+        "message": "Password updated successfully"
+    }
 
 
 @router.get("/requests/{request_id}/files/{file_id}")

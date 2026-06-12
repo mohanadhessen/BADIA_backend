@@ -85,6 +85,14 @@ def delete_user(db: Session, email: str) -> bool:
     return True
 
 
+def update_user_password(db: Session, email: str, new_password_hash: str) -> bool:
+    db_user = get_user_by_email(db, email=email)
+    if not db_user:
+        return False
+    db_user.password_hash = new_password_hash
+    db.commit()
+    return True
+
 
 def admin_update_user_data(db: Session, email: str, update_data: dict) -> User:
     user = db.query(User).filter(User.email == email).first()

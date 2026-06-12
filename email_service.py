@@ -32,13 +32,16 @@ def send_verification_email(email: str, token: str):
     </div>
     """
 
-    return resend.Emails.send({
-        "from": "BADIA <onboarding@resend.dev>",
-        "to": [email],
-        "subject": "Verify your email",
-        "html": html
-    })
-
+    try:
+        return resend.Emails.send({
+            "from": "BADIA <onboarding@resend.dev>",
+            "to": [email],
+            "subject": "Verify your email",
+            "html": html
+        })
+    except Exception as e:
+        print(f"Warning: Could not send verification email to {email}: {e}")
+        return None
 
 def send_password_reset_email(email: str, token: str):
     reset_url = f"http://127.0.0.1:3000/reset_password_page.html?token={token}"
@@ -68,13 +71,16 @@ def send_password_reset_email(email: str, token: str):
     </div>
     """
 
-    return resend.Emails.send({
-        "from": "BADIA <onboarding@resend.dev>",
-        "to": [email],
-        "subject": "Password Reset",
-        "html": html
-    })
-
+    try:
+        return resend.Emails.send({
+            "from": "BADIA <onboarding@resend.dev>",
+            "to": [email],
+            "subject": "Password Reset",
+            "html": html
+        })
+    except Exception as e:
+        print(f"Warning: Could not send password reset email to {email}: {e}")
+        return None
 
 
 
@@ -249,13 +255,16 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
     </html>
     """
 
-    return resend.Emails.send({
-        "from": "BADIA <onboarding@resend.dev>",
-        "to": [email],
-        "subject": subject,
-        "html": html,
-    })
-
+    try:
+        return resend.Emails.send({
+            "from": "BADIA <onboarding@resend.dev>",
+            "to": [email],
+            "subject": subject,
+            "html": html,
+        })
+    except Exception as e:
+        print(f"Warning: Could not send request status email to {email}: {e}")
+        return None
 
 
 def send_plan_update_email(
@@ -389,13 +398,16 @@ def send_plan_update_email(
     </html>
     """
 
-    return resend.Emails.send({
-        "from": "BADIA <onboarding@resend.dev>",
-        "to": [email],
-        "subject": f"Plan Updated — {plan_name} is now active",
-        "html": html,
-    })
-
+    try:
+        return resend.Emails.send({
+            "from": "BADIA <onboarding@resend.dev>",
+            "to": [email],
+            "subject": f"Plan Updated — {plan_name} is now active",
+            "html": html,
+        })
+    except Exception as e:
+        print(f"Warning: Could not send plan update email to {email}: {e}")
+        return None
 
 def send_plan_cancelled_by_admin_email(
     email: str,
@@ -511,12 +523,16 @@ def send_plan_cancelled_by_admin_email(
     </html>
     """
 
-    return resend.Emails.send({
-        "from": "BADIA <onboarding@resend.dev>",
-        "to": [email],
-        "subject": f"Your {plan_name} Subscription Has Been Cancelled",
-        "html": html,
-    })
+    try:
+        return resend.Emails.send({
+            "from": "BADIA <onboarding@resend.dev>",
+            "to": [email],
+            "subject": f"Your {plan_name} Subscription Has Been Cancelled",
+            "html": html,
+        })
+    except Exception as e:
+        print(f"Warning: Could not send plan cancelled email to {email}: {e}")
+        return None
 
 
 def get_emails_metric():
