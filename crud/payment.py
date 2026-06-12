@@ -72,7 +72,6 @@ def update_payment(
     if not payment:
         raise ValueError("Payment not found")
 
-    previous_status = payment.status
 
     update_data = data.model_dump(exclude_unset=True)
 
