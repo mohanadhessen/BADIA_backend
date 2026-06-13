@@ -15,7 +15,6 @@ class UserRegister(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
-    remember_me: bool = True   
 
 
 class UserProfileResponse(BaseModel):

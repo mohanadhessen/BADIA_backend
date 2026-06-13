@@ -36,7 +36,7 @@ def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)
     }
 
     access_token = create_access_token(data=token_payload)
-    refresh_token = create_refresh_token(token_payload, user_in.remember_me)
+    refresh_token = create_refresh_token(token_payload)
     return {
         "access_token": access_token, 
         "token_type": "bearer",

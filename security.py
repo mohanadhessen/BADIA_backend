@@ -35,17 +35,21 @@ def decode_access_token(token: str):
 
 
 
-def create_refresh_token(data: dict, remember_me: bool = False):
+def create_refresh_token(data: dict):
     to_encode = data.copy()
-    
-    # Set expiration: 30 days if Remember Me is checked, otherwise 7 days
-    if remember_me:
-        expire = datetime.now(timezone.utc) + timedelta(days=30)
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(days=7)
-        
-    to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    expire = datetime.now(timezone.utc) + timedelta(days=180)
+
+    to_encode.update({
+        "exp": expire,
+        "type": "refresh"
+    })
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
     return encoded_jwt
 
 

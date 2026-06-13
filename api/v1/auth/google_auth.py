@@ -46,7 +46,7 @@ def login_google(request: Request):
 
 @router.get("/google/callback")
 @limiter.limit("10/minute")
-async def auth_google_callback(request: Request, db: Session = Depends(get_db), remember_me: bool = True):
+async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
 
     if not code:
@@ -122,7 +122,7 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db), 
 
     # Generate backend application tokens
     access_token = create_access_token(data=token_payload)
-    refresh_token = create_refresh_token(data=token_payload, remember_me=remember_me)
+    refresh_token = create_refresh_token(data=token_payload)
     
     # -------------------------------------------------------------------------
     # FIXED: Redirect to Frontend Account Page instead of returning JSON
