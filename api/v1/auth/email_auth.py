@@ -28,9 +28,9 @@ def request_verification(request: Request, payload: VerificationRequest, db: Ses
         return {"message": "If the account exists and is unverified, a link has been sent."}
         
     # Generate token using your existing token utility
-    token = create_email_verification_token(payload.email) 
+    token = create_email_verification_token(user.email) 
     # Send the email
-    send_verification_email(payload.email, token) 
+    send_verification_email(user.email, token) 
     
     return {"message": "If the account exists and is unverified, a link has been sent."}
 

@@ -21,6 +21,16 @@ def compute_etag(data: Any) -> str:
             c_ts = item.created_at.timestamp() if hasattr(item.created_at, 'timestamp') else str(item.created_at)
             state.append(f"c:{c_ts}")
             
+        # Add safety checks for important status fields that might change
+        if hasattr(item, "is_email_verified"):
+            state.append(f"ev:{item.is_email_verified}")
+        if hasattr(item, "is_active"):
+            state.append(f"a:{item.is_active}")
+        if hasattr(item, "status"):
+            state.append(f"s:{item.status}")
+        if hasattr(item, "current_plan_id"):
+            state.append(f"p:{item.current_plan_id}")
+            
         # Handle dicts (e.g., if items are serialized or raw dicts)
         if isinstance(item, dict):
             if "id" in item:
