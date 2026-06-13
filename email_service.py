@@ -1,11 +1,11 @@
 import resend
 from config import settings
 from datetime import datetime,timezone
-
 resend.api_key = settings.RESEND_API_KEY
+FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
 
 def send_verification_email(email: str, token: str):
-    verify_url = f"http://127.0.0.1:3000/verify_email_page.html?token={token}"
+    verify_url = f"{FRONTEND_ACCOUNT_URL}/verify_email_page.html?token={token}"
 
     html = f"""
     <div style="font-family: Arial, sans-serif; width: 100%; background-color: #f9f9f9; padding: 40px 0; text-align: center;">
@@ -44,7 +44,7 @@ def send_verification_email(email: str, token: str):
         return None
 
 def send_password_reset_email(email: str, token: str):
-    reset_url = f"http://127.0.0.1:3000/reset_password_page.html?token={token}"
+    reset_url = f"{FRONTEND_ACCOUNT_URL}/reset_password_page.html?token={token}"
 
     html = f"""
     <div style="font-family: Arial, sans-serif; width: 100%; background-color: #f9f9f9; padding: 40px 0; text-align: center;">

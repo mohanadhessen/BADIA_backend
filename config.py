@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str
     R2_SECRET_ACCESS_KEY: str
 
-    FRONTEND_ACCOUNT_URL: str = "http://127.0.0.1:3000/Signin.html"
+    FRONTEND_ACCOUNT_URL: str = "https://badia-frontend.mohanadhessen.workers.dev"
 
     class Config:
         env_file = ".env"
