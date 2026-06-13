@@ -1,9 +1,20 @@
 import resend
 from config import settings
 from datetime import datetime,timezone
+from database.session import SessionLocal
+from crud.email_metric import log_email_sent
+
 resend.api_key = settings.RESEND_API_KEY
 FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
 
+def _log_email(email: str, subject: str):
+    db = SessionLocal()
+    try:
+        log_email_sent(db, email, subject)
+    except Exception as e:
+        print(f"Warning: Could not log email to {email}: {e}")
+    finally:
+        db.close()
 def send_verification_email(email: str, token: str):
     verify_url = f"{FRONTEND_ACCOUNT_URL}/verify_email_page.html?token={token}"
 
@@ -33,12 +44,14 @@ def send_verification_email(email: str, token: str):
     """
 
     try:
-        return resend.Emails.send({
+        res = resend.Emails.send({
             "from": "BADIA <onboarding@resend.dev>",
             "to": [email],
             "subject": "Verify your email",
             "html": html
         })
+        _log_email(email, "Verify your email")
+        return res
     except Exception as e:
         print(f"Warning: Could not send verification email to {email}: {e}")
         return None
@@ -72,12 +85,14 @@ def send_password_reset_email(email: str, token: str):
     """
 
     try:
-        return resend.Emails.send({
+        res = resend.Emails.send({
             "from": "BADIA <onboarding@resend.dev>",
             "to": [email],
             "subject": "Password Reset",
             "html": html
         })
+        _log_email(email, "Password Reset")
+        return res
     except Exception as e:
         print(f"Warning: Could not send password reset email to {email}: {e}")
         return None
@@ -256,12 +271,14 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
     """
 
     try:
-        return resend.Emails.send({
+        res = resend.Emails.send({
             "from": "BADIA <onboarding@resend.dev>",
             "to": [email],
             "subject": subject,
             "html": html,
         })
+        _log_email(email, subject)
+        return res
     except Exception as e:
         print(f"Warning: Could not send request status email to {email}: {e}")
         return None
@@ -399,12 +416,14 @@ def send_plan_update_email(
     """
 
     try:
-        return resend.Emails.send({
+        res = resend.Emails.send({
             "from": "BADIA <onboarding@resend.dev>",
             "to": [email],
             "subject": f"Plan Updated — {plan_name} is now active",
             "html": html,
         })
+        _log_email(email, f"Plan Updated — {plan_name} is now active")
+        return res
     except Exception as e:
         print(f"Warning: Could not send plan update email to {email}: {e}")
         return None
@@ -524,37 +543,16 @@ def send_plan_cancelled_by_admin_email(
     """
 
     try:
-        return resend.Emails.send({
+        res = resend.Emails.send({
             "from": "BADIA <onboarding@resend.dev>",
             "to": [email],
             "subject": f"Your {plan_name} Subscription Has Been Cancelled",
             "html": html,
         })
+        _log_email(email, f"Your {plan_name} Subscription Has Been Cancelled")
+        return res
     except Exception as e:
         print(f"Warning: Could not send plan cancelled email to {email}: {e}")
         return None
 
 
-def get_emails_metric():
-    response = resend.Emails.list()
-    now = datetime.now(timezone.utc)
-    MONTH_LIMIT = 3000
-    DAY_LIMIT = 300
-    daily_count = 0
-    monthly_count = 0
-
-    for e in response["data"]:
-        dt = datetime.fromisoformat(e["created_at"].replace("Z", "+00:00"))
-
-        if dt.year == now.year and dt.month == now.month:
-            monthly_count += 1
-
-            if dt.date() == now.date():
-                daily_count += 1
-
-    return {
-        "daily_count": daily_count,
-        "monthly_count": monthly_count,
-        "day_limit": DAY_LIMIT,
-        "month_limit": MONTH_LIMIT
-    }
