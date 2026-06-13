@@ -8,6 +8,7 @@ from crud.user import update_user_data, delete_user, update_user_password
 from security import verify_password, hash_password
 from models.UserFile import UserFile
 from crud.request import get_request_by_id, delete_request, get_user_requests
+from crud.review import get_reviews_by_user
 from config import settings
 from r2_client import s3
 from api.rate_limiter import limiter
@@ -83,6 +84,37 @@ def get_my_requests(
     
     # Calculate etag based on requests list (so any changes inside reflect)
     etag = compute_etag(requests)
+    check_etag(request, etag)
+    response.headers["ETag"] = etag
+    return data
+
+@router.get("/me/reviews")
+@limiter.limit("60/minute")
+def get_my_reviews(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    reviews = get_reviews_by_user(db=db, user_id=current_user.id)
+    formatted_reviews = []
+    for rev in reviews:
+        formatted_reviews.append({
+            "id": rev.id,
+            "stars": rev.stars,
+            "review_text": rev.review_text,
+            "is_published": rev.is_published,
+            "created_at": rev.created_at,
+            "updated_at": rev.updated_at
+        })
+
+    data = {
+        "status": "success",
+        "reviews": formatted_reviews
+    }
+    
+    # Calculate etag based on reviews list
+    etag = compute_etag(reviews)
     check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
