@@ -9,7 +9,8 @@ from crud.user import (
     get_user_by_email,
     get_users_plans_distribution,
     admin_update_user_data,
-    get_user_by_id
+    get_user_by_id,
+    delete_user
 )
 from schemas.admin import AdminUserUpdateSchema
 
@@ -78,6 +79,32 @@ def update_user_data(
         )
 
     return updated_user
+
+
+
+@router.delete("/users/{identifier}")
+@limiter.limit("20/minute")
+def delete_user_endpoint(
+    request: Request,
+    identifier: str,
+    db: Session = Depends(get_db)
+):
+    if "@" in identifier:
+        user = get_user_by_email(db, identifier)
+    else:
+        try:
+            user = get_user_by_id(db, int(identifier))
+        except ValueError:
+            raise HTTPException(400, "Invalid user identifier")
+
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    success = delete_user(db, user.email)
+    if not success:
+        raise HTTPException(400, "Could not delete user")
+
+    return {"message": "User deleted successfully"}
 
 
 
