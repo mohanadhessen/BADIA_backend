@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException , Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 from database.session import get_db
-from crud.user import get_user_by_email , create_new_user
+from crud.user import get_user_by_email, create_new_user, get_user_by_id
 from config import settings
 import httpx
-from security import create_access_token , create_refresh_token , set_auth_cookies
+from security import create_access_token, create_refresh_token, set_auth_cookies, SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 from api.rate_limiter import limiter
+from datetime import timedelta
+from pydantic import BaseModel
 
 
 
@@ -113,18 +116,53 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
             auth_provider="google"
         )
 
-    # Prepare token payload
-    token_payload = {
-        "sub": str(user.id),
-        "email": user.email,
-        "role": user.role
-    }
+    # Instead of setting cookies directly on a 302 redirect (which fails in Safari/Incognito due to 3rd-party cookie blocking),
+    # we create a short-lived exchange token and pass it to the frontend via URL.
+    exchange_token = create_access_token(data={"sub": str(user.id), "type": "exchange"}, expires_delta=timedelta(minutes=5))
 
-    # Generate backend application tokens
-    access_token = create_access_token(data=token_payload)
-    refresh_token = create_refresh_token(data=token_payload)
-    
-
-    redirect_response = RedirectResponse(url=f"{FRONTEND_ACCOUNT_URL}?oauth_complete=true", status_code=302)
-    set_auth_cookies(redirect_response, access_token, refresh_token)
+    redirect_response = RedirectResponse(url=f"{FRONTEND_ACCOUNT_URL}?oauth_token={exchange_token}", status_code=302)
     return redirect_response
+
+
+class ExchangeRequest(BaseModel):
+    token: str
+
+@router.post("/google/exchange")
+@limiter.limit("20/minute")
+def exchange_google_token(request: Request, response: Response, payload: ExchangeRequest, db: Session = Depends(get_db)):
+    try:
+        decoded = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
+        if decoded.get("type") != "exchange":
+            raise HTTPException(status_code=400, detail="Invalid token type")
+            
+        user_id = decoded.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Invalid token payload")
+            
+        user = get_user_by_id(db, int(user_id))
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+            
+        token_payload = {
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role
+        }
+        
+        access_token = create_access_token(data=token_payload)
+        refresh_token = create_refresh_token(data=token_payload)
+        
+        set_auth_cookies(response, access_token, refresh_token)
+        
+        return {
+            "status": "success",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "role": user.role,
+                "first_name": user.first_name,
+                "last_name": user.last_name
+            }
+        }
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid exchange token")
