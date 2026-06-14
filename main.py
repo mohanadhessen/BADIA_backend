@@ -21,25 +21,33 @@ from api.v1.admin.plans import router as admin_plans_router
 from api.v1.admin.storage import router as admin_storage_router
 from api.v1.admin.payments import router as admin_notifications_router
 
+from config import settings
 
-app = FastAPI(title="BADIA API")
+
+app = FastAPI(
+    title="BADIA API",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
+)
 
 # SlowAPI rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "https://badia-frontend.mohanadhessen.workers.dev"
-]
+middleware_kwargs = dict(
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+if settings.cors_regex:
+    middleware_kwargs["allow_origin_regex"] = settings.cors_regex
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https://.*\.workers\.dev",
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

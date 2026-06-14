@@ -7,8 +7,8 @@ from fastapi import HTTPException, status
 
 
 SECRET_KEY = settings.TOKEN_SECRET_KEY
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 pwd = PasswordHash.recommended()

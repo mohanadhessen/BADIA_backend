@@ -1,21 +1,24 @@
 from pydantic_settings import BaseSettings
 from urllib.parse import quote_plus
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
+    cors_origins: List[str]
+
     DB_HOST: str
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str
     DB_PORT: int = 3306
 
-    # Google OAuth Settings
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REDIRECT_URL: str
 
-    # TOKEN SECRET_KEY
     TOKEN_SECRET_KEY: str
+    ALGORITHM : str
+    ACCESS_TOKEN_EXPIRE_MINUTES : int
 
     RESEND_API_KEY: str
     R2_ENDPOINT: str
@@ -23,7 +26,7 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str
     R2_SECRET_ACCESS_KEY: str
 
-    FRONTEND_ACCOUNT_URL: str = "https://badia-frontend.mohanadhessen.workers.dev"
+    FRONTEND_ACCOUNT_URL: str
 
     class Config:
         env_file = ".env"
