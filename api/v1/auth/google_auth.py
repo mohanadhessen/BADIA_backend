@@ -6,7 +6,7 @@ from database.session import get_db
 from crud.user import get_user_by_email , create_new_user
 from config import settings
 import httpx
-from security import create_access_token , create_refresh_token
+from security import create_access_token , create_refresh_token , set_auth_cookies
 from api.rate_limiter import limiter
 
 
@@ -125,10 +125,6 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     refresh_token = create_refresh_token(data=token_payload)
     
 
-    redirect_url = (
-        f"{FRONTEND_ACCOUNT_URL}"
-        f"?access_token={access_token}"
-        f"&refresh_token={refresh_token}"
-    )
-    
-    return RedirectResponse(url=redirect_url)
+    redirect_response = RedirectResponse(url=f"{FRONTEND_ACCOUNT_URL}?oauth_complete=true", status_code=302)
+    set_auth_cookies(redirect_response, access_token, refresh_token)
+    return redirect_response

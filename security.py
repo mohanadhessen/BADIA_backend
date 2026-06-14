@@ -86,3 +86,44 @@ def verify_refresh_token(token: str) -> dict:
             detail="Invalid or malformed refresh token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def set_auth_cookies(response, access_token: str, refresh_token: str = None):
+    """Set HttpOnly auth cookies on the response."""
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    if refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=60 * 60 * 24 * 180,  # 180 days, matches create_refresh_token
+            path="/api/v1/",
+        )
+
+
+def clear_auth_cookies(response):
+    """Remove auth cookies from the response."""
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/api/v1/",
+    )

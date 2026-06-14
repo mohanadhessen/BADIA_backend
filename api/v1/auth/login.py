@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from database.session import get_db
 from schemas.user import LoginRequest
 from crud.user import get_user_by_email , get_user_by_id
-from security import  create_access_token , verify_password , create_refresh_token , verify_refresh_token
-from schemas.auth import TokenRefreshRequest, TokenResponse
+from security import  create_access_token , verify_password , create_refresh_token , verify_refresh_token , set_auth_cookies , clear_auth_cookies
 from api.rate_limiter import limiter
-from pydantic import BaseModel
 from models.revoked_token import RevokedToken
+from api.dependencies import get_current_user
+from models.user import User
 
 
 router = APIRouter(tags=["Auth"])
 
 
-@router.post("/auth/login",response_model=TokenResponse)
+@router.post("/auth/login")
 @limiter.limit("5/minute")
-def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, user_in: LoginRequest, db: Session = Depends(get_db)):
     existing_user = get_user_by_email(db, user_in.email)
     if not existing_user:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
@@ -39,23 +39,35 @@ def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)
 
     access_token = create_access_token(data=token_payload)
     refresh_token = create_refresh_token(token_payload)
+
+    set_auth_cookies(response, access_token, refresh_token)
+
     return {
-        "access_token": access_token, 
-        "token_type": "bearer",
-        "refresh_token":refresh_token
+        "status": "success",
+        "user": {
+            "id": existing_user.id,
+            "email": existing_user.email,
+            "role": existing_user.role,
+            "first_name": existing_user.first_name,
+            "last_name": existing_user.last_name,
+        }
     }
 
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 @limiter.limit("10/minute")
-def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Session = Depends(get_db)):
+def refresh_access_token(request: Request, response: Response, db: Session = Depends(get_db)):
 
-    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == payload.refresh_token).first()
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="No refresh token provided")
+
+    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == refresh_token).first()
     if is_revoked:
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
-    decoded_data = verify_refresh_token(payload.refresh_token)
+    decoded_data = verify_refresh_token(refresh_token)
     user_id = decoded_data.get("sub")
 
     user = get_user_by_id(db, int(user_id))
@@ -71,22 +83,50 @@ def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Ses
     }
     new_access_token = create_access_token(data=new_payload)
     
+    set_auth_cookies(response, new_access_token)
+
+    return {"status": "success"}
+
+
+@router.post("/auth/logout")
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        is_revoked = db.query(RevokedToken).filter(RevokedToken.token == refresh_token).first()
+        if not is_revoked:
+            revoked = RevokedToken(token=refresh_token)
+            db.add(revoked)
+            db.commit()
+
+    clear_auth_cookies(response)
+    return {"status": "success", "message": "Logged out successfully"}
+
+
+@router.get("/auth/check")
+def auth_check(current_user: User = Depends(get_current_user)):
     return {
-        "access_token": new_access_token,
-        "token_type": "bearer"
+        "authenticated": True,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "role": current_user.role,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+        }
     }
 
 
-class RevokeRequest(BaseModel):
-    refresh_token: str
-
 @router.post("/auth/revoke")
-def revoke_token(payload: RevokeRequest, db: Session = Depends(get_db)):
-    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == payload.refresh_token).first()
+def revoke_token(request: Request, db: Session = Depends(get_db)):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="No refresh token")
+
+    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == refresh_token).first()
     if is_revoked:
         return {"msg": "Token already revoked"}
         
-    revoked = RevokedToken(token=payload.refresh_token)
+    revoked = RevokedToken(token=refresh_token)
     db.add(revoked)
     db.commit()
     return {"msg": "Token revoked successfully"}
