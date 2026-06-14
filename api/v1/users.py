@@ -288,7 +288,16 @@ def download_my_file(
         raise HTTPException(404, "File not found")
 
     try:
-        presigned_url = s3.generate_presigned_url(
+        inline_url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": R2_BUCKET,
+                "Key": db_file.file_key,
+                "ResponseContentDisposition": f'inline; filename="{db_file.filename}"',
+            },
+            ExpiresIn=300
+        )
+        download_url = s3.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": R2_BUCKET,
@@ -303,7 +312,8 @@ def download_my_file(
     from fastapi.responses import JSONResponse
 
     return JSONResponse({
-        "url": presigned_url,
+        "url": inline_url,
+        "download_url": download_url,
         "filename": db_file.filename
     })
 
