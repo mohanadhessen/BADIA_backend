@@ -1,10 +1,24 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from urllib.parse import quote_plus
-from typing import List, Optional
+from typing import List, Optional, Union
+import json
 
 
 class Settings(BaseSettings):
-    cors_origins: List[str]
+    cors_origins: Union[List[str], str]
+    cors_regex: Optional[str] = None
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, list):
+            return v
+        if isinstance(v, str) and v.startswith("["):
+             return json.loads(v)
+        return v
 
     DB_HOST: str
     DB_USER: str

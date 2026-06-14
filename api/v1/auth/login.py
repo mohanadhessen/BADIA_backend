@@ -6,6 +6,8 @@ from crud.user import get_user_by_email , get_user_by_id
 from security import  create_access_token , verify_password , create_refresh_token , verify_refresh_token
 from schemas.auth import TokenRefreshRequest, TokenResponse
 from api.rate_limiter import limiter
+from pydantic import BaseModel
+from models.revoked_token import RevokedToken
 
 
 router = APIRouter(tags=["Auth"])
@@ -49,6 +51,10 @@ def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)
 @limiter.limit("10/minute")
 def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Session = Depends(get_db)):
 
+    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == payload.refresh_token).first()
+    if is_revoked:
+        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+
     decoded_data = verify_refresh_token(payload.refresh_token)
     user_id = decoded_data.get("sub")
 
@@ -69,3 +75,24 @@ def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Ses
         "access_token": new_access_token,
         "token_type": "bearer"
     }
+
+
+class RevokeRequest(BaseModel):
+    refresh_token: str
+
+@router.post("/auth/revoke")
+def revoke_token(payload: RevokeRequest, db: Session = Depends(get_db)):
+    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == payload.refresh_token).first()
+    if is_revoked:
+        return {"msg": "Token already revoked"}
+        
+    revoked = RevokedToken(token=payload.refresh_token)
+    db.add(revoked)
+    db.commit()
+    return {"msg": "Token revoked successfully"}
+
+@router.delete("/auth/flush-revoked")
+def flush_revoked_tokens(db: Session = Depends(get_db)):
+    db.query(RevokedToken).delete()
+    db.commit()
+    return {"msg": "Flushed revoked tokens successfully"}

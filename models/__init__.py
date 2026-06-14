@@ -5,3 +5,4 @@ from .review import Review
 from .UserFile import UserFile
 from .email_metric import EmailMetric
 from .request import Request
+from .revoked_token import RevokedToken
