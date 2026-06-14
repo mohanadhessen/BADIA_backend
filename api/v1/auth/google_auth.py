@@ -124,13 +124,7 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     access_token = create_access_token(data=token_payload)
     refresh_token = create_refresh_token(data=token_payload)
     
-    # -------------------------------------------------------------------------
-    # FIXED: Redirect to Frontend Account Page instead of returning JSON
-    # -------------------------------------------------------------------------
-    # Replace this with your actual frontend URL (e.g., from your settings/config)
 
-    
-    # Construct redirect URL appending tokens as query parameters
     redirect_url = (
         f"{FRONTEND_ACCOUNT_URL}"
         f"?access_token={access_token}"
