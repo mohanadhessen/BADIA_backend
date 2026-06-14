@@ -61,6 +61,11 @@ def register_company(request: Request, response: Response, user_in: UserRegister
                 "first_name": new_user.first_name,
                 "last_name": new_user.last_name,
                 "company_name": new_user.company_name,
+                "phone": new_user.phone,
+                "avatar_url": new_user.avatar_url,
+                "auth_provider": new_user.auth_provider,
+                "created_at": new_user.created_at,
+                "is_email_verified": new_user.is_email_verified,
             }
         }
 

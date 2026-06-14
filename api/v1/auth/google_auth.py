@@ -13,7 +13,7 @@ from datetime import timedelta
 from pydantic import BaseModel
 
 
-
+http_client = httpx.AsyncClient()
 router = APIRouter(tags=["OAuth"])
 
 
@@ -55,27 +55,36 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     if not code:
         raise HTTPException(status_code=400, detail="Missing code")
 
-    async with httpx.AsyncClient() as client:
-        # 1. Exchange code → token
-        token_res = await client.post(
-            GOOGLE_TOKEN_ENDPOINT,
-            data={
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": GOOGLE_REDIRECT_URL,
-                "grant_type": "authorization_code",
-            },
-        )
+    # 1. Exchange code → token
+    token_res = await http_client.post(
+        GOOGLE_TOKEN_ENDPOINT,
+        data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URL,
+            "grant_type": "authorization_code",
+        },
+    )
 
-        token_data = token_res.json()
-        google_access_token = token_data.get("access_token")
+    token_data = token_res.json()
+    google_access_token = token_data.get("access_token")
 
-        if not google_access_token:
-            raise HTTPException(status_code=400, detail="No access token received from Google")
+    if not google_access_token:
+        raise HTTPException(status_code=400, detail="No access token received from Google")
 
-        # 2. Get user info from Google
-        user_res = await client.get(
+    # Optimize: extract user info directly from id_token to avoid an extra network call
+    id_token = token_data.get("id_token")
+    user_data = None
+    if id_token:
+        try:
+            user_data = jwt.get_unverified_claims(id_token)
+        except Exception:
+            pass
+
+    if not user_data:
+        # 2. Get user info from Google (Fallback)
+        user_res = await http_client.get(
             GOOGLE_USERINFO_ENDPOINT,
             headers={"Authorization": f"Bearer {google_access_token}"},
         )
@@ -161,7 +170,13 @@ def exchange_google_token(request: Request, response: Response, payload: Exchang
                 "email": user.email,
                 "role": user.role,
                 "first_name": user.first_name,
-                "last_name": user.last_name
+                "last_name": user.last_name,
+                "company_name": user.company_name,
+                "phone": user.phone,
+                "avatar_url": user.avatar_url,
+                "auth_provider": user.auth_provider,
+                "created_at": user.created_at,
+                "is_email_verified": user.is_email_verified,
             }
         }
     except JWTError:

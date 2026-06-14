@@ -50,6 +50,12 @@ def login(request: Request, response: Response, user_in: LoginRequest, db: Sessi
             "role": existing_user.role,
             "first_name": existing_user.first_name,
             "last_name": existing_user.last_name,
+            "company_name": existing_user.company_name,
+            "phone": existing_user.phone,
+            "avatar_url": existing_user.avatar_url,
+            "auth_provider": existing_user.auth_provider,
+            "created_at": existing_user.created_at,
+            "is_email_verified": existing_user.is_email_verified,
         }
     }
 
@@ -112,6 +118,12 @@ def auth_check(current_user: User = Depends(get_current_user)):
             "role": current_user.role,
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
+            "company_name": current_user.company_name,
+            "phone": current_user.phone,
+            "avatar_url": current_user.avatar_url,
+            "auth_provider": current_user.auth_provider,
+            "created_at": current_user.created_at,
+            "is_email_verified": current_user.is_email_verified,
         }
     }
 
