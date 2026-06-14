@@ -1,10 +1,9 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from api.rate_limiter import limiter
-from api.dependencies import verify_csrf
 from api.v1.auth.register import router as register_router
 from api.v1.auth.google_auth import router as google_router
 from api.v1.auth.login import router as login_router 
@@ -29,8 +28,7 @@ app = FastAPI(
     title="BADIA API",
     docs_url=None,
     redoc_url=None,
-    openapi_url=None,
-    dependencies=[Depends(verify_csrf)]
+    openapi_url=None
 )
 
 # SlowAPI rate limiter
@@ -49,12 +47,12 @@ if settings.cors_regex:
 
 app.add_middleware(
     CORSMiddleware,
-    **middleware_kwargs,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
 
 app.include_router(register_router, prefix="/api/v1")
 app.include_router(login_router, prefix="/api/v1")
