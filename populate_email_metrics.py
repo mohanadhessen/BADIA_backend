@@ -66,7 +66,7 @@ def populate_metrics():
             try:
                 print("Sending a live test email via Resend API...")
                 res = resend.Emails.send({
-                    "from": "BADIA <onboarding@resend.dev>",
+                    "from": "BADIA <no-reply@badiaprojectmanagement.com>",
                     "to": "mohanadhessen@gmail.com",
                     "subject": "Onboarding Verification Code",
                     "html": "<p>This is a test verification email sent during database population.</p>"

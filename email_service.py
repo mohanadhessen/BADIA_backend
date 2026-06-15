@@ -45,7 +45,7 @@ def send_verification_email(email: str, token: str):
 
     try:
         res = resend.Emails.send({
-            "from": "BADIA <onboarding@resend.dev>",
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": "Verify your email",
             "html": html
@@ -86,7 +86,7 @@ def send_password_reset_email(email: str, token: str):
 
     try:
         res = resend.Emails.send({
-            "from": "BADIA <onboarding@resend.dev>",
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": "Password Reset",
             "html": html
@@ -272,7 +272,7 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
 
     try:
         res = resend.Emails.send({
-            "from": "BADIA <onboarding@resend.dev>",
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": subject,
             "html": html,
@@ -417,7 +417,7 @@ def send_plan_update_email(
 
     try:
         res = resend.Emails.send({
-            "from": "BADIA <onboarding@resend.dev>",
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": f"Plan Updated — {plan_name} is now active",
             "html": html,
@@ -544,7 +544,7 @@ def send_plan_cancelled_by_admin_email(
 
     try:
         res = resend.Emails.send({
-            "from": "BADIA <onboarding@resend.dev>",
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": f"Your {plan_name} Subscription Has Been Cancelled",
             "html": html,

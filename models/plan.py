@@ -14,8 +14,8 @@ class Plan(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     
-    users = relationship("User", back_populates="current_plan")
-    payments = relationship("Payment", primaryjoin="Plan.id == Payment.plan_id", foreign_keys="[Payment.plan_id]", back_populates="plan")
+    users = relationship("User", back_populates="current_plan", passive_deletes=True)
+    payments = relationship("Payment", primaryjoin="Plan.id == Payment.plan_id", foreign_keys="[Payment.plan_id]", back_populates="plan", passive_deletes="all")
 
 
 
