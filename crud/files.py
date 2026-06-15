@@ -1,4 +1,5 @@
 from models.UserFile import UserFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -65,6 +66,8 @@ def delete_file(db: Session, file_id: str) -> bool:
     file = db.query(UserFile).filter(UserFile.file_id == file_id).first()
     if not file:
         return False
+    if file.request:
+        file.request.updated_at = func.now()
     db.delete(file)
     db.commit()
     return True
@@ -161,6 +164,9 @@ def update_files(
     file_record.filename = new_filename
     file_record.size = len(new_file_bytes)
     file_record.content_type = new_content_type
+
+    if file_record.request:
+        file_record.request.updated_at = func.now()
 
     db_session.commit()
 

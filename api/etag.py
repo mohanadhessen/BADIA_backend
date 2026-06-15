@@ -10,30 +10,6 @@ def compute_etag(data: Any) -> str:
     def extract_state(item):
         state = []
         
-        # Handle SQLAlchemy models or objects
-        if hasattr(item, "id"):
-            state.append(f"id:{item.id}")
-        if hasattr(item, "updated_at") and item.updated_at:
-            # handle both datetime objects and strings
-            u_ts = item.updated_at.timestamp() if hasattr(item.updated_at, 'timestamp') else str(item.updated_at)
-            state.append(f"u:{u_ts}")
-        if hasattr(item, "created_at") and item.created_at:
-            c_ts = item.created_at.timestamp() if hasattr(item.created_at, 'timestamp') else str(item.created_at)
-            state.append(f"c:{c_ts}")
-            
-        # Add safety checks for important status fields that might change
-        if hasattr(item, "is_email_verified"):
-            state.append(f"ev:{item.is_email_verified}")
-        if hasattr(item, "is_active"):
-            state.append(f"a:{item.is_active}")
-        if hasattr(item, "status"):
-            state.append(f"s:{item.status}")
-        if hasattr(item, "current_plan_id"):
-            state.append(f"p:{item.current_plan_id}")
-        if hasattr(item, "role"):
-            state.append(f"r:{item.role}")
-            
-        # Handle dicts (e.g., if items are serialized or raw dicts)
         if isinstance(item, dict):
             if "id" in item:
                 state.append(f"id:{item['id']}")
@@ -43,12 +19,64 @@ def compute_etag(data: Any) -> str:
                 state.append(f"c:{item['created_at']}")
             if "role" in item and item["role"]:
                 state.append(f"r:{item['role']}")
+            if "is_email_verified" in item:
+                state.append(f"ev:{item['is_email_verified']}")
+            if "is_active" in item:
+                state.append(f"a:{item['is_active']}")
+            if "status" in item:
+                state.append(f"s:{item['status']}")
+            if "current_plan_id" in item:
+                state.append(f"p:{item['current_plan_id']}")
+            if "files" in item and item["files"]:
+                files_state = []
+                for f in item["files"]:
+                    if isinstance(f, dict):
+                        f_id = f.get("file_id") or f.get("id") or ""
+                        f_name = f.get("filename") or ""
+                        f_size = f.get("size") or 0
+                        files_state.append(f"f:{f_id}:{f_name}:{f_size}")
+                if files_state:
+                    state.append("|".join(files_state))
             if not state:
                 # If no id/updated_at, just use the string representation
                 try:
                     state.append(str(sorted(item.items())))
                 except TypeError:
                     state.append(str(item))
+        else:
+            # Handle SQLAlchemy models or objects
+            if hasattr(item, "id"):
+                state.append(f"id:{item.id}")
+            if hasattr(item, "updated_at") and item.updated_at:
+                # handle both datetime objects and strings
+                u_ts = item.updated_at.timestamp() if hasattr(item.updated_at, 'timestamp') else str(item.updated_at)
+                state.append(f"u:{u_ts}")
+            if hasattr(item, "created_at") and item.created_at:
+                c_ts = item.created_at.timestamp() if hasattr(item.created_at, 'timestamp') else str(item.created_at)
+                state.append(f"c:{c_ts}")
+                
+            # Add safety checks for important status fields that might change
+            if hasattr(item, "is_email_verified"):
+                state.append(f"ev:{item.is_email_verified}")
+            if hasattr(item, "is_active"):
+                state.append(f"a:{item.is_active}")
+            if hasattr(item, "status"):
+                state.append(f"s:{item.status}")
+            if hasattr(item, "current_plan_id"):
+                state.append(f"p:{item.current_plan_id}")
+            if hasattr(item, "role"):
+                state.append(f"r:{item.role}")
+                
+            if hasattr(item, "files") and item.files:
+                files_state = []
+                for f in item.files:
+                    if hasattr(f, "file_id"):
+                        f_id = getattr(f, "file_id")
+                        f_name = getattr(f, "filename", "")
+                        f_size = getattr(f, "size", 0)
+                        files_state.append(f"f:{f_id}:{f_name}:{f_size}")
+                if files_state:
+                    state.append("|".join(files_state))
                 
         return "|".join(state) if state else str(item)
 
