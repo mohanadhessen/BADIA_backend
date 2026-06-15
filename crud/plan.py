@@ -49,19 +49,6 @@ def update_plan(db: Session, plan: Plan, data: dict):
     return plan
 
 def delete_plan(db: Session, plan: Plan):
-
-    paid_exists = (
-        db.query(Payment.id)
-        .filter(
-            Payment.plan_id == plan.id,
-            Payment.status == "paid"
-        )
-        .first()
-    )
-
-    if paid_exists:
-        return False  
-
     db.delete(plan)
     db.commit()
 
