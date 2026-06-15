@@ -30,6 +30,8 @@ def compute_etag(data: Any) -> str:
             state.append(f"s:{item.status}")
         if hasattr(item, "current_plan_id"):
             state.append(f"p:{item.current_plan_id}")
+        if hasattr(item, "role"):
+            state.append(f"r:{item.role}")
             
         # Handle dicts (e.g., if items are serialized or raw dicts)
         if isinstance(item, dict):
@@ -39,6 +41,8 @@ def compute_etag(data: Any) -> str:
                 state.append(f"u:{item['updated_at']}")
             if "created_at" in item and item["created_at"]:
                 state.append(f"c:{item['created_at']}")
+            if "role" in item and item["role"]:
+                state.append(f"r:{item['role']}")
             if not state:
                 # If no id/updated_at, just use the string representation
                 try:
