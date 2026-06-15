@@ -9,7 +9,7 @@ class Payment(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=False)
+    plan_id = Column(Integer, ForeignKey("plans.id",ondelete="RESTRICT"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     billing_cycle = Column(
         Enum("monthly", "yearly", name="billing_cycle"),
