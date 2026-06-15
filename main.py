@@ -20,6 +20,7 @@ from api.v1.admin.requests import router as admin_requests_router
 from api.v1.admin.plans import router as admin_plans_router
 from api.v1.admin.storage import router as admin_storage_router
 from api.v1.admin.payments import router as admin_notifications_router
+from api.v1.admin.dashboard import router as admin_dashboard_router
 
 from config import settings
 
@@ -75,6 +76,7 @@ app.include_router(plans_router, prefix="/api/v1/plans")
 app.include_router(file_router, prefix="/api/v1/files")
 
 # Admin routers (modular)
+app.include_router(admin_dashboard_router, prefix="/api/v1/admin")
 app.include_router(admin_users_router, prefix="/api/v1/admin")
 app.include_router(admin_reviews_router, prefix="/api/v1/admin")
 app.include_router(admin_requests_router, prefix="/api/v1/admin")

@@ -18,7 +18,9 @@ R2_BUCKET = settings.R2_BUCKET
 router = APIRouter(tags=["Users"])
 
 
-from api.etag import compute_etag, check_etag
+from api.etag import compute_etag, check_etag, compute_db_etag
+from models.request import Request as DBRequest
+from models.review import Review
 
 
 @router.get("/me")
@@ -59,6 +61,9 @@ def get_my_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    etag = compute_db_etag(db, DBRequest, filters=[DBRequest.user_id == current_user.id], order_by=DBRequest.created_at.desc())
+    check_etag(request, etag)
+
     requests = get_user_requests(db=db, user_id=current_user.id)
     formatted_requests = []
     for req in requests:
@@ -82,9 +87,6 @@ def get_my_requests(
         "requests": formatted_requests
     }
     
-    # Calculate etag based on requests list (so any changes inside reflect)
-    etag = compute_etag(requests)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 
@@ -96,6 +98,9 @@ def get_my_reviews(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    etag = compute_db_etag(db, Review, filters=[Review.user_id == current_user.id], order_by=Review.created_at.desc())
+    check_etag(request, etag)
+
     reviews = get_reviews_by_user(db=db, user_id=current_user.id)
     formatted_reviews = []
     for rev in reviews:
@@ -113,9 +118,6 @@ def get_my_reviews(
         "reviews": formatted_reviews
     }
     
-    # Calculate etag based on reviews list
-    etag = compute_etag(reviews)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 

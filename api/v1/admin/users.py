@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag
+from api.etag import compute_etag, check_etag, compute_db_etag, compute_global_db_etag
+from models.user import User
+from models.plan import Plan
 from crud.user import (
     admin_get_all_users,
     get_user_by_email,
@@ -32,14 +34,16 @@ def get_all_users(
     only_active: bool = False,
     db: Session = Depends(get_db)
 ):
+    filters = [User.is_active == True] if only_active else None
+    etag = compute_db_etag(db, User, page=page, limit=limit, filters=filters, order_by=User.created_at.desc())
+    check_etag(request, etag)
+
     data = admin_get_all_users(
         db=db,
         page=page,
         limit=limit,
         only_active=only_active
     )
-    etag = compute_etag(data)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 
@@ -47,9 +51,9 @@ def get_all_users(
 @router.get("/users/plan-distribution")
 @limiter.limit("60/minute")
 def get_users_plan_distribution(request: Request, response: Response, db: Session = Depends(get_db)):
-    data = get_users_plans_distribution(db)
-    etag = compute_etag(data)
+    etag = compute_global_db_etag(db, [User, Plan])
     check_etag(request, etag)
+    data = get_users_plans_distribution(db)
     response.headers["ETag"] = etag
     return data
 
@@ -123,6 +127,15 @@ def get_user_endpoint(
             detail="Either user_id or email is required"
         )
 
+    filters = []
+    if user_id is not None:
+        filters.append(User.id == user_id)
+    else:
+        filters.append(User.email == email)
+
+    etag = compute_db_etag(db, User, filters=filters)
+    check_etag(request, etag)
+
     if user_id is not None:
         user = get_user_by_id(db, user_id)
     else:
@@ -134,7 +147,5 @@ def get_user_endpoint(
             detail="User not found"
         )
 
-    etag = compute_etag(user)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return user

@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag
+from api.etag import compute_etag, check_etag, compute_db_etag
+from models.review import Review
 from crud.review import (
     admin_get_all_review,
     delete_review,
@@ -28,13 +29,14 @@ def get_all_reviews(
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
+    etag = compute_db_etag(db, Review, page=page, limit=limit, order_by=Review.created_at.desc())
+    check_etag(request, etag)
+    
     data = admin_get_all_review(
         db=db,
         page=page,
         limit=limit
     )
-    etag = compute_etag(data)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 

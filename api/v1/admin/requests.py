@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag
+from api.etag import compute_etag, check_etag, compute_db_etag
+from models.request import Request as DBRequest
 from crud.request import get_request_by_id, delete_request, admin_get_all_requests, update_request_status
 from email_service import send_request_status_email
 from schemas.admin import StatusUpdate
@@ -29,13 +30,14 @@ def get_all_requests(
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
+    etag = compute_db_etag(db, DBRequest, page=page, limit=limit, order_by=DBRequest.created_at.desc())
+    check_etag(request, etag)
+
     data = admin_get_all_requests(
         db=db,
         page=page,
         limit=limit
     )
-    etag = compute_etag(data)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 

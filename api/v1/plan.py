@@ -6,12 +6,11 @@ from crud.plan import  get_all_plans , get_plans_cache_metadata
 from schemas.plan import PlanResponse
 import hashlib
 from api.rate_limiter import limiter
+from models.plan import Plan
+from api.etag import compute_db_etag, check_etag
 
 
 router = APIRouter(tags=["Plans"])
-
-
-from api.etag import compute_etag, check_etag
 
 
 @router.get("/", response_model=list[PlanResponse])
@@ -21,10 +20,10 @@ def list_plans(
     response: Response,
     db: Session = Depends(get_db)
 ):
-    plans = get_all_plans(db)
-    
-    etag = compute_etag(plans)
+    etag = compute_db_etag(db, Plan)
     check_etag(request, etag)
+    
+    plans = get_all_plans(db)
     
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "no-cache"

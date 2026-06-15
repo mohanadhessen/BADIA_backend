@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag
+from api.etag import compute_etag, check_etag, compute_db_etag
+from models.payment import Payment
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
 from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id
@@ -29,14 +30,16 @@ def get_all_payments(
     status: str | None = None,
     db: Session = Depends(get_db)
 ):
+    filters = [Payment.status == status] if status else None
+    etag = compute_db_etag(db, Payment, page=page, limit=limit, filters=filters, order_by=Payment.created_at.desc())
+    check_etag(request, etag)
+
     data = admin_get_all_payments(
         db=db,
         page=page,
         limit=limit,
         status=status
     )
-    etag = compute_etag(data)
-    check_etag(request, etag)
     response.headers["ETag"] = etag
     return data
 

@@ -117,3 +117,119 @@ def check_etag(request: Request, etag: str):
     if_none_match = request.headers.get("if-none-match")
     if if_none_match == etag:
         raise HTTPException(status_code=304, headers={"ETag": etag})
+
+def compute_db_etag(
+    db: Any,
+    model: Any,
+    page: int | None = None,
+    limit: int | None = None,
+    filters: list | None = None,
+    order_by: Any = None
+) -> str:
+    """
+    Computes an ETag using only the 'id' and the timestamp field ('updated_at', 'created_at', or 'sent_at')
+    queried directly from the DB. This avoids fetching and serializing the entire dataset.
+    """
+    from sqlalchemy import func
+    
+    id_field = getattr(model, "id", None)
+    ts_field = None
+    if hasattr(model, "updated_at"):
+        ts_field = model.updated_at
+    elif hasattr(model, "created_at"):
+        ts_field = model.created_at
+    elif hasattr(model, "sent_at"):
+        ts_field = model.sent_at
+        
+    fields = []
+    if id_field is not None:
+        fields.append(id_field)
+    if ts_field is not None:
+        fields.append(ts_field)
+        
+    if not fields:
+        count = db.query(func.count()).select_from(model).scalar() or 0
+        return f'W/"count-{count}"'
+        
+    query = db.query(*fields)
+    
+    if filters:
+        for f in filters:
+            query = query.filter(f)
+            
+    if order_by is not None:
+        query = query.order_by(order_by)
+        
+    # Get total count for pagination context
+    count_query = db.query(func.count(id_field or model.id))
+    if filters:
+        for f in filters:
+            count_query = count_query.filter(f)
+    total_count = count_query.scalar() or 0
+    
+    if page is not None and limit is not None:
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+    elif limit is not None:
+        query = query.limit(limit)
+        
+    results = query.all()
+    
+    components = [f"total:{total_count}"]
+    for row in results:
+        row_str = []
+        for val in row:
+            if hasattr(val, "timestamp"):
+                row_str.append(str(val.timestamp()))
+            else:
+                row_str.append(str(val))
+        components.append("-".join(row_str))
+        
+    raw_string = "||".join(components).encode("utf-8")
+    return f'W/"{hashlib.md5(raw_string).hexdigest()}"'
+
+def compute_global_db_etag(db: Any, models: list) -> str:
+    """
+    Computes a global ETag over a list of models by querying only their count and maximum timestamp.
+    Extremely fast for consolidated endpoints like the dashboard.
+    """
+    from sqlalchemy import func
+    components = []
+    
+    for item in models:
+        if isinstance(item, tuple):
+            model, filters = item
+        else:
+            model = item
+            filters = None
+            
+        id_field = getattr(model, "id", None)
+        ts_field = None
+        if hasattr(model, "updated_at"):
+            ts_field = model.updated_at
+        elif hasattr(model, "created_at"):
+            ts_field = model.created_at
+        elif hasattr(model, "sent_at"):
+            ts_field = model.sent_at
+            
+        count_q = db.query(func.count(id_field or model.id))
+        max_q = db.query(func.max(ts_field)) if ts_field is not None else None
+        
+        if filters:
+            for f in filters:
+                count_q = count_q.filter(f)
+                if max_q is not None:
+                    max_q = max_q.filter(f)
+                    
+        count_val = count_q.scalar() or 0
+        max_val = max_q.scalar() if max_q is not None else None
+        
+        if hasattr(max_val, "timestamp"):
+            max_ts = str(max_val.timestamp())
+        else:
+            max_ts = str(max_val)
+            
+        components.append(f"{model.__tablename__}:{count_val}:{max_ts}")
+        
+    raw_string = "||".join(components).encode("utf-8")
+    return f'W/"{hashlib.md5(raw_string).hexdigest()}"'
