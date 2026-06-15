@@ -8,8 +8,8 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    plan_id = Column(Integer, ForeignKey("plans.id",ondelete="RESTRICT"), nullable=False)
+    user_id = Column(Integer, nullable=False)
+    plan_id = Column(Integer, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     billing_cycle = Column(
         Enum("monthly", "yearly", name="billing_cycle"),
@@ -26,5 +26,5 @@ class Payment(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
-    user = relationship("User", back_populates="payments")
-    plan = relationship("Plan", back_populates="payments")
+    user = relationship("User", primaryjoin="Payment.user_id == User.id", foreign_keys=[user_id], back_populates="payments")
+    plan = relationship("Plan", primaryjoin="Payment.plan_id == Plan.id", foreign_keys=[plan_id], back_populates="payments")

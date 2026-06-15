@@ -14,7 +14,7 @@ class User(Base):
     avatar_url = Column(Text)
     auth_provider = Column(Enum("local", "google", name="auth_provider"), nullable=False, server_default="local")
     is_email_verified = Column(Boolean, nullable=False, server_default="0")
-    current_plan_id = Column(Integer, ForeignKey("plans.id"),nullable=True , default=None)
+    current_plan_id = Column(Integer, ForeignKey("plans.id", ondelete="SET NULL"),nullable=True , default=None)
     subscription_end_date = Column(TIMESTAMP)
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
@@ -22,7 +22,7 @@ class User(Base):
     phone = Column(String(20))
     is_active = Column(Boolean, nullable=False, server_default=text("1"))
     reviews = relationship("Review", back_populates="user")
-    payments = relationship("Payment", back_populates="user")
+    payments = relationship("Payment", primaryjoin="User.id == Payment.user_id", foreign_keys="[Payment.user_id]", back_populates="user")
     current_plan = relationship("Plan", back_populates="users")
     requests = relationship("Request",back_populates="user", cascade="all, delete-orphan")
 
