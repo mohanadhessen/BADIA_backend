@@ -52,12 +52,13 @@ SECTION 2 - HIGH PRIORITY -- ALL DONE
    - Remaining action (config/env, not code): confirm the Render cors_origins
      env var includes https://badiaprojectmanagement.com and the www variant.
 
-7.[DONE] FRONTEND_ACCOUNT_URL still defaults to the old workers.dev URL
+7. [DONE] FRONTEND_ACCOUNT_URL still defaults to the old workers.dev URL
    - File: config.py
    - Used to build links inside transactional emails (password reset, account).
      If the Render env var wasn't updated after the domain migration, those
      emails point users to the old domain.
    - Fix: update the default and confirm the Render env var is set correctly.
+
 
 8. Sentry is installed but never initialized
    - sentry_sdk is in requirements.txt/pyproject.toml, but there is no
