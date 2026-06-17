@@ -1,12 +1,12 @@
 BADIA - FULL FIX LIST (final review)
 =====================================
 Compiled from review of BADIA_backend and BADIA_frontend (production repos).
-
+ 
 SECTION 1 - CRITICAL SECURITY -- ALL DONE
 ------------------------------------------------------------
 1. [DONE] Unauthenticated endpoint: DELETE /api/v1/auth/flush-revoked
    - Removed entirely from login.py.
-
+ 
 2. [DONE] Unauthenticated endpoint: POST /api/v1/auth/revoke
    - Now requires Depends(get_current_user), and verifies the refresh token's
      "sub" matches current_user.id before allowing revocation (decodes via
@@ -14,7 +14,7 @@ SECTION 1 - CRITICAL SECURITY -- ALL DONE
      before any DB lookup).
    - Optional/still open: no rate limit on this endpoint (login/refresh have
      one). Low priority now that it's auth-gated.
-
+ 
 3. [DONE] JWT access/refresh token type confusion
    - create_access_token() now sets "type": "access".
    - decode_access_token() in security.py centralizes the jwt.decode call;
@@ -25,51 +25,49 @@ SECTION 1 - CRITICAL SECURITY -- ALL DONE
      refresh/re-login. Expected, not a bug.
    - Tiny leftover cosmetic nit: create_access_token() may still set "exp"
      twice (redundant, harmless) - clean up next time you're in security.py.
-
-SECTION 2 - HIGH PRIORITY (fix this week) -- DO THESE NEXT
+ 
+SECTION 2 - HIGH PRIORITY -- ALL DONE
 ------------------------------------------------------------
-4. Bug: algorithms=ALGORITHM instead of algorithms=[ALGORITHM]
-   - File: security.py, inside verify_refresh_token()
-   - Passes a bare string where a list is expected. It happens to "work" only
-     because Python's `in` operator does substring matching on strings - fragile
-     and inconsistent with decode_access_token() which does it correctly.
-   - Fix: change to algorithms=[ALGORITHM].
-
-5. No refresh token rotation
-   - File: api/v1/auth/login.py (/refresh endpoint)
-   - Refreshing only issues a new access token; the original refresh token
-     stays valid until its full 180-day expiry or an explicit (currently broken,
-     see #2) revoke call.
-   - Fix: issue + return a new refresh token on every refresh, revoke the old
-     one server-side. Consider shortening refresh lifetime to 7-30 days once
-     rotation is in place.
-
+4. [DONE] Bug: algorithms=ALGORITHM instead of algorithms=[ALGORITHM]
+   - Fixed in verify_refresh_token() in security.py - now algorithms=[ALGORITHM],
+     matching decode_access_token().
+ 
+5. [DONE] No refresh token rotation
+   - /refresh now revokes the old refresh token (create_revoked_token) and
+     issues a brand new access_token + refresh_token pair on every call.
+   - Refresh token lifetime shortened from 180 days to 30 days.
+   - Revoked-token CRUD (create_revoked_token / is_token_revoked) moved into
+     its own crud file, matching the rest of the codebase's pattern.
+   - Minor known edge case, not urgent: a tight race (e.g. client retry) could
+     let the same old refresh token mint two new token pairs before either
+     request revokes it. Low risk at current traffic, no action needed now.
+ 
 6. CORS missing the production custom domain
    - File: main.py
    - `origins` list only has localhost / 127.0.0.1 / the old *.workers.dev
      domain - no badiaprojectmanagement.com or www. variant.
    - Fix: add both explicitly.
-
+ 
 7. FRONTEND_ACCOUNT_URL still defaults to the old workers.dev URL
    - File: config.py
    - Used to build links inside transactional emails (password reset, account).
      If the Render env var wasn't updated after the domain migration, those
      emails point users to the old domain.
    - Fix: update the default and confirm the Render env var is set correctly.
-
+ 
 8. Sentry is installed but never initialized
    - sentry_sdk is in requirements.txt/pyproject.toml, but there is no
      sentry_sdk.init(...) call anywhere in the codebase.
    - Result: no actual error tracking/alerting in production right now.
    - Fix: add sentry_sdk.init(dsn=..., traces_sample_rate=...) in main.py at
      startup.
-
+ 
 SECTION 3 - CLEANUP (same-day, low risk)
 ------------------------------------------------------------
 9. Verify /docs and /redoc are disabled in production
    - main.py instantiates FastAPI(title="BADIA API") with no docs_url/redoc_url
      override. Set both to None when running in production.
-
+ 
 10. Remove dead/duplicate dependencies
     - psycopg2-binary: never imported anywhere - confirmed dead. The app
       actually connects via mysql+pymysql (see #13 below).
@@ -79,18 +77,18 @@ SECTION 3 - CLEANUP (same-day, low risk)
     - Duplicate JWT libs: python-jose AND pyjwt both present - security.py
       currently uses jose; pick one (pyjwt is more actively maintained) and
       remove the other from requirements.txt/pyproject.toml.
-
+ 
 11. Remove/relocate debug scripts from repo root
     - check_user.py: a one-off debug script with a hardcoded personal email
       address committed to the repo. Move to a scripts/ folder (gitignored)
       or delete.
     - populate_email_metrics.py: looks like a one-off data backfill script -
       move to a scripts/ folder so it's not mixed in with application code.
-
+ 
 12. Delete dead frontend file
     - BADIA_frontend/Signin.html - auth moved to a modal in index.html.
       Confirm nothing links to it, then remove.
-
+ 
 SECTION 4 - NEEDS CONFIRMATION (medium priority, verify then fix)
 ------------------------------------------------------------
 13. Database driver mismatch - confirm which DB you're actually on
@@ -102,19 +100,19 @@ SECTION 4 - NEEDS CONFIRMATION (medium priority, verify then fix)
     - This isn't necessarily wrong, but make sure this matches your actual
       intent/documentation - and since psycopg2-binary is dead code (see #10),
       remove it rather than leaving it as a red herring for future-you.
-
+ 
 14. DB connection pool sizing vs. provider limits
     - database/session.py sets pool_size=20, max_overflow=20 -> up to 40
       connections per worker process. If Render ever runs multiple
       workers/instances, check this against your DB plan's max connection
       limit so you don't get connection-exhaustion errors under load.
-
+ 
 15. RevokedToken stores the raw refresh token in plaintext
     - models/revoked_token.py stores the full token string in the DB.
     - Minor defense-in-depth issue: if the DB is ever exposed/leaked, those
       rows contain live (if revoked) JWTs. Consider storing a hash of the
       token instead.
-
+ 
 16. Exception-message string matching for control flow
     - crud/files.py (update_files) signals "Forbidden" / "File not found" via
       exception message strings, and api/v1/requests.py matches on
@@ -122,30 +120,30 @@ SECTION 4 - NEEDS CONFIRMATION (medium priority, verify then fix)
       message text silently breaks the 403/404 distinction.
     - Fix: use custom exception classes (e.g. FileNotFoundError subclass,
       PermissionError) instead of matching message strings.
-
+ 
 SECTION 5 - LARGER PROJECTS (days to weeks)
 ------------------------------------------------------------
 17. Add a pytest + httpx test suite
     - Start with: login/register, refresh + revoke flow (especially once #2/#3
       are fixed - these need regression tests), file ownership checks,
       payments.
-
+ 
 18. Move email sending off the request path
     - Wrap Resend calls in FastAPI BackgroundTasks so registration/reset
       endpoints return immediately.
-
+ 
 19. Set up Alembic migrations
     - Generate an initial migration from current models, commit to
       `alembic upgrade head` for all future schema changes. Do this before
       your next schema change and before #20.
-
+ 
 20. Move to async SQLAlchemy + an async MySQL driver (e.g. asyncmy/aiomysql)
     - Files: database/session.py, database/base.py, all crud/*.py, all
       api/v1/*.py routes that touch the DB.
     - Sync DB calls inside async route handlers block the event loop under
       concurrent load. Biggest single change, highest payoff for performance.
       Do this after Alembic is in place.
-
+ 
 NOTES
 -----
 - Section 1 items are the most urgent - they're real, exploitable holes in a
@@ -155,3 +153,4 @@ NOTES
   intentional, and if so clean up the leftovers").
 - Section 5 are the larger architectural projects, ordered so each one makes
   the next safer (tests -> background tasks -> migrations -> async DB layer).
+ 

@@ -9,6 +9,11 @@ from api.rate_limiter import limiter
 from models.user import User
 from models.revoked_token import RevokedToken
 from api.dependencies import get_current_user
+from crud.revoked_token import (
+    get_revoked_token,
+    create_revoked_token,
+    is_token_revoked
+)
 
 
 router = APIRouter(tags=["Auth"])
@@ -57,6 +62,7 @@ def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Ses
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
     decoded_data = verify_refresh_token(payload.refresh_token)
+    old_refresh_token = payload.refresh_token
     user_id = decoded_data.get("sub")
 
     user = get_user_by_id(db, int(user_id))
@@ -70,13 +76,14 @@ def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Ses
         "email": decoded_data.get("email"),
         "role": decoded_data.get("role", "user")
     }
+    create_revoked_token(db, old_refresh_token)
     new_access_token = create_access_token(data=new_payload)
-    
+    new_refresh_token = create_refresh_token(data=new_payload)
     return {
         "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
         "token_type": "bearer"
     }
-
 
 
 
@@ -84,6 +91,7 @@ def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Ses
 @router.post("/auth/revoke")
 @limiter.limit("10/minute")
 def revoke_token(
+    request: Request,
     payload: TokenRefreshRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -97,15 +105,9 @@ def revoke_token(
             detail="You cannot revoke this token"
         )
 
-    is_revoked = db.query(RevokedToken).filter(
-        RevokedToken.token == payload.refresh_token
-    ).first()
-
-    if is_revoked:
+    if is_token_revoked(db, payload.refresh_token):
         return {"msg": "Token already revoked"}
 
-    revoked = RevokedToken(token=payload.refresh_token)
-    db.add(revoked)
-    db.commit()
+    create_revoked_token(db, payload.refresh_token)
 
     return {"msg": "Token revoked successfully"}

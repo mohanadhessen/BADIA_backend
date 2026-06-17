@@ -40,7 +40,7 @@ def decode_access_token(token: str):
 
 def create_refresh_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=180)
+    expire = datetime.now(timezone.utc) + timedelta(days=30)
 
     to_encode.update({
         "exp": expire,
@@ -58,13 +58,11 @@ def create_refresh_token(data: dict):
 
 
 def verify_refresh_token(token: str) -> dict:
-
     try:
-
         payload = jwt.decode(
             token, 
             SECRET_KEY, 
-            algorithms=ALGORITHM
+            algorithms=[ALGORITHM]
         )
         
         # Enforce type constraints to block access tokens from exploiting this path
@@ -74,9 +72,7 @@ def verify_refresh_token(token: str) -> dict:
                 detail="Invalid token type context",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-            
         return payload
-        
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
