@@ -118,33 +118,37 @@ def admin_get_all_users(
 ):
     offset = (page - 1) * limit
 
-    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_users = db.query(func.count(User.id)).filter(User.role == "user").scalar() or 0
 
     active_users = (
         db.query(func.count(User.id))
+        .filter(User.role == "user")
         .filter(User.is_active == True)
         .scalar() or 0
     )
 
     inactive_users = (
         db.query(func.count(User.id))
+        .filter(User.role == "user")
         .filter(User.is_active == False)
         .scalar() or 0
     )
 
     verified_users = (
         db.query(func.count(User.id))
+        .filter(User.role == "user")
         .filter(User.is_email_verified == True)
         .scalar() or 0
     )
 
     unverified_users = (
         db.query(func.count(User.id))
+        .filter(User.role == "user")
         .filter(User.is_email_verified == False)
         .scalar() or 0
     )
 
-    query = db.query(User)
+    query = db.query(User).filter(User.role == "user")
 
     if only_active:
         query = query.filter(User.is_active == True)
@@ -180,6 +184,7 @@ def get_users_plans_distribution(db: Session):
             func.count(User.id).label("count")
         )
         .select_from(User)
+        .filter(User.role == "user")
         .outerjoin(Plan, User.current_plan_id == Plan.id)
         .group_by(Plan.id, Plan.name)
         .all()

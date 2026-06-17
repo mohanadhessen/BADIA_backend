@@ -79,14 +79,16 @@ def forgot_password(
 ):
     user = get_user_by_email(db, payload.email)
 
-    
     if not user:
-        return {"message": "If email exists, reset link was sent"}
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email address not found in our records"
+        )
 
     token = create_password_reset_token(payload.email)
     background_tasks.add_task(send_password_reset_email, payload.email, token)
 
-    return {"message": "If email exists, reset link was sent"}
+    return {"message": "Reset link sent successfully"}
 
 
 

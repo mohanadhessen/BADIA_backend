@@ -34,7 +34,9 @@ def get_all_users(
     only_active: bool = False,
     db: Session = Depends(get_db)
 ):
-    filters = [User.is_active == True] if only_active else None
+    filters = [User.role == "user"]
+    if only_active:
+        filters.append(User.is_active == True)
     etag = compute_db_etag(db, User, page=page, limit=limit, filters=filters, order_by=User.created_at.desc())
     check_etag(request, etag)
 
@@ -149,3 +151,109 @@ def get_user_endpoint(
 
     response.headers["ETag"] = etag
     return user
+
+
+@router.get("/users/search/autocomplete")
+@limiter.limit("120/minute")
+def autocomplete_user_emails(
+    q: str = "",
+    db: Session = Depends(get_db)
+):
+    if not q:
+        return []
+    emails = (
+        db.query(User.email)
+        .filter(User.role == "user")
+        .filter(User.email.ilike(f"{q}%"))
+        .limit(15)
+        .all()
+    )
+    return [email[0] for email in emails]
+
+
+@router.get("/users/search/results")
+@limiter.limit("30/minute")
+def search_user_by_email(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    if not email:
+        raise HTTPException(status_code=400, detail="Email query parameter is required")
+        
+    user = db.query(User).filter(User.email == email, User.role == "user").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    from models.request import Request as DBRequest
+    from models.review import Review as DBReview
+    from sqlalchemy.orm import joinedload
+    
+    requests = (
+        db.query(DBRequest)
+        .options(joinedload(DBRequest.files))
+        .filter(DBRequest.user_id == user.id)
+        .order_by(DBRequest.created_at.desc())
+        .all()
+    )
+    
+    reviews = (
+        db.query(DBReview)
+        .filter(DBReview.user_id == user.id)
+        .order_by(DBReview.created_at.desc())
+        .all()
+    )
+    
+    formatted_requests = [
+        {
+            "id": r.id,
+            "request_id": r.request_id,
+            "service_type": r.service_type,
+            "status": r.status,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_id": f.file_id,
+                    "filename": f.filename,
+                    "file_key": f.file_key,
+                    "content_type": f.content_type,
+                    "size": f.size,
+                    "created_at": f.created_at,
+                }
+                for f in r.files
+            ]
+        }
+        for r in requests
+    ]
+    
+    formatted_reviews = [
+        {
+            "id": rev.id,
+            "stars": rev.stars,
+            "review_text": rev.review_text,
+            "is_published": rev.is_published,
+            "created_at": rev.created_at,
+            "updated_at": rev.updated_at
+        }
+        for rev in reviews
+    ]
+    
+    return {
+        "user": {
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "company_name": user.company_name,
+            "email": user.email,
+            "phone": user.phone,
+            "avatar_url": user.avatar_url,
+            "is_active": user.is_active,
+            "is_email_verified": user.is_email_verified,
+            "current_plan_id": user.current_plan_id,
+            "subscription_end_date": user.subscription_end_date,
+            "created_at": user.created_at,
+        },
+        "requests": formatted_requests,
+        "reviews": formatted_reviews
+    }

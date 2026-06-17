@@ -38,6 +38,7 @@ def send_verification_email(email: str, token: str):
             </a>
             
             <hr style="border: none; border-top: 1px solid #eeeeee; margin: 30px 0;">
+            <p style="color: #999999; font-size: 12px; margin-bottom: 8px;">Note: If you do not see this email in your inbox, please check your spam, junk, or delete folder.</p>
             <p style="color: #999999; font-size: 12px;">If you did not request this, you can safely ignore this email.</p>
         </div>
     </div>
@@ -79,6 +80,7 @@ def send_password_reset_email(email: str, token: str):
             </a>
             
             <hr style="border: none; border-top: 1px solid #eeeeee; margin: 30px 0;">
+            <p style="color: #999999; font-size: 12px; margin-bottom: 8px;">Note: If you do not see this email in your inbox, please check your spam, junk, or delete folder.</p>
             <p style="color: #999999; font-size: 12px;">If you did not request this, you can safely ignore this email.</p>
         </div>
     </div>
@@ -256,7 +258,7 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
                     &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting
                   </p>
                   <p style="margin:0; font-size:12px; color:#9a9a90; line-height:1.7;">
-                    This email was sent to you because you hold an active BADIA account.
+                    This email was sent to you because you hold an active BADIA account. Note: If you don't see our emails in your inbox, please check your spam or delete folder.
                   </p>
                 </td>
               </tr>
@@ -401,7 +403,7 @@ def send_plan_update_email(
                   </p>
                   <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
                     &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
-                    This email was sent to you because you hold an active BADIA account.
+                    This email was sent to you because you hold an active BADIA account. Note: If you don't see our emails in your inbox, please check your spam or delete folder.
                   </p>
                 </td>
               </tr>
@@ -528,7 +530,7 @@ def send_plan_cancelled_by_admin_email(
                   </p>
                   <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
                     &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
-                    This email was sent to you because you hold an active BADIA account.
+                    This email was sent to you because you hold an active BADIA account. Note: If you don't see our emails in your inbox, please check your spam or delete folder.
                   </p>
                 </td>
               </tr>
