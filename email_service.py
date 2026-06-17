@@ -557,31 +557,97 @@ def send_plan_cancelled_by_admin_email(
 
 
 def send_contact_form_email(name: str, visitor_email: str, phone: str, message: str):
-    html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-radius: 8px;">
-        <h2 style="color: #1a1a18; border-bottom: 2px solid #f5f5ee; padding-bottom: 10px; margin-top: 0;">New Contact Form Submission</h2>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72; width: 120px;">Name</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;">{name}</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72;">Email</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;"><a href="mailto:{visitor_email}" style="color: #1a1a18; text-decoration: none;">{visitor_email}</a></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72;">Phone</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;">{phone}</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72; vertical-align: top;">Message</td>
-                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18; white-space: pre-wrap; line-height: 1.6;">{message}</td>
-            </tr>
-        </table>
-        <div style="margin-top: 30px; font-size: 12px; color: #9a9a90; text-align: center; border-top: 1px solid #e8e8e0; padding-top: 15px;">
-            This email was generated from the Website Contact Form.
-        </div>
-    </div>
+    phone_display = phone if phone else "—"
+    html = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Contact Form Submission - BADIA</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f0f0eb; font-family:Arial, sans-serif;">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f0eb; padding:40px 16px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+              style="max-width:580px; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #ddddd8;">
+
+              <tr>
+                <td style="background-color:#0f1117; padding:32px 40px 28px; text-align:center;">
+                  <p style="margin:0; font-size:22px; font-weight:700; color:#ffffff; letter-spacing:3px; text-transform:uppercase;">BADIA</p>
+                  <p style="margin:6px 0 0; font-size:11px; color:#7a7a72; letter-spacing:1.5px; text-transform:uppercase;">Business Consulting &amp; Accounting</p>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="background-color:#f5f5ee; border-bottom:1px solid #e8e8e0; padding:20px 40px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding-right:14px; vertical-align:middle;">
+                        <div style="width:36px; height:36px; border-radius:50%; background-color:#e2f1f5; border:1.5px solid #3c91a8; text-align:center; line-height:36px; font-size:16px; color:#22708a; font-weight:bold;">&#9993;</div>
+                      </td>
+                      <td style="vertical-align:middle;">
+                        <p style="margin:0; font-size:14px; font-weight:700; color:#1a1a18;">New Website Inquiry</p>
+                        <p style="margin:2px 0 0; font-size:12px; color:#7a7a72;">An inbound message has arrived from the frontend contact form</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding:32px 40px 28px;">
+
+                  <p style="margin:0 0 12px; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#9a9a90;">Sender Profile Details</p>
+
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-bottom:28px;">
+                    <tr>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72; width:30%;">Name</td>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{name}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Email</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; font-weight:600; text-align:right;">
+                        <a href="mailto:{visitor_email}" style="color:#1a1a18; text-decoration:underline;">{visitor_email}</a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Phone</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{phone_display}</td>
+                    </tr>
+                  </table>
+
+                  <p style="margin:0 0 10px; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#9a9a90;">Submitted Message</p>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="background-color:#f5f5ee; border-left:3px solid #1a1a18; border-radius:0 4px 4px 0; padding:16px 20px;">
+                        <div style="margin:0; font-size:14px; color:#3a3a36; line-height:1.7; white-space:pre-wrap; word-break:break-word;">{message}</div>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+
+              <tr>
+                <td style="background-color:#f5f5ee; border-top:1px solid #e8e8e0; padding:24px 40px; text-align:center;">
+                  <p style="margin:0 0 6px; font-size:12px; color:#9a9a90; line-height:1.7;">
+                    &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting
+                  </p>
+                  <p style="margin:0; font-size:11px; color:#b0b0a8; line-height:1.7;">
+                    This is an internally routed execution notification originating securely from your web app backend system layers.
+                  </p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
+
+    </body>
+    </html>
     """
 
     try:
