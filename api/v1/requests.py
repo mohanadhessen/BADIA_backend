@@ -5,13 +5,18 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from ..dependencies import get_current_user
 from models import User  
-from crud.files import upload_to_r2 , update_files
+from crud.files import (
+    upload_to_r2,
+    update_files,
+    build_feasibility_pdf,
+    FileRecordNotFoundError,
+    FileAccessForbiddenError,
+)
 from crud.request import create_request, get_existing_request
 from r2_client import s3
 from config import settings
 from schemas.request import FeasibilityRequest 
 from schemas.FileResponse import FileResponse
-from crud.files import build_feasibility_pdf
 from api.rate_limiter import limiter
 
 
@@ -180,11 +185,11 @@ async def update_operational_partnership_file(
             new_content_type=file.content_type,
             user_id=current_user.id,
         )
+    except FileAccessForbiddenError:
+        raise HTTPException(status_code=403, detail="You do not own this file")
+    except FileRecordNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
-        if str(e) == "Forbidden":
-            raise HTTPException(status_code=403, detail="You do not own this file")
-        if str(e) == "File not found":
-            raise HTTPException(status_code=404, detail="File not found")
         raise HTTPException(status_code=500, detail=str(e))
 
     return updated
@@ -212,11 +217,11 @@ async def update_feasibility_file(
             new_content_type="application/pdf",
             user_id=current_user.id
         )
+    except FileAccessForbiddenError:
+        raise HTTPException(status_code=403, detail="You do not own this file")
+    except FileRecordNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
-        if str(e) == "Forbidden":
-            raise HTTPException(status_code=403, detail="You do not own this file")
-        if str(e) == "File not found":
-            raise HTTPException(status_code=404, detail="File not found")
         raise HTTPException(status_code=500, detail=str(e))
 
     return updated

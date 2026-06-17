@@ -118,13 +118,14 @@ SECTION 4 - NEEDS CONFIRMATION (medium priority, verify then fix)
       token instead.
 
 
-16. Exception-message string matching for control flow
+16. [DONE] Exception-message string matching for control flow
     - crud/files.py (update_files) signals "Forbidden" / "File not found" via
       exception message strings, and api/v1/requests.py matches on
       str(e) == "Forbidden" etc. Fragile - a future refactor that changes the
       message text silently breaks the 403/404 distinction.
     - Fix: use custom exception classes (e.g. FileNotFoundError subclass,
       PermissionError) instead of matching message strings.
+
 
 SECTION 5 - LARGER PROJECTS (days to weeks)
 ------------------------------------------------------------

@@ -10,6 +10,15 @@ import uuid
 from crud.request import Request
 
 
+class FileRecordNotFoundError(Exception):
+    pass
+
+
+class FileAccessForbiddenError(Exception):
+    pass
+
+
+
 
 def create_file(
     db: Session,
@@ -150,9 +159,10 @@ def update_files(
     )
 
     if not file_record:
-        raise Exception("File not found")
+        raise FileRecordNotFoundError("File not found")
     if file_record.request.user_id != user_id:        
-      raise Exception("Forbidden")
+      raise FileAccessForbiddenError("Forbidden")
+
 
     s3.put_object(
         Bucket=bucket_name,
