@@ -240,7 +240,7 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
                       <td style="background-color:#f5f5ee; border-left:3px solid #1a1a18; border-radius:0 4px 4px 0; padding:14px 18px;">
                         <p style="margin:0; font-size:13px; color:#3a3a36; line-height:1.6;">
                           In the meantime, if you have any urgent questions, please don&rsquo;t hesitate to contact us at
-                          <a href="mailto:support@badia.com" style="color:#1a1a18; font-weight:600;">support@badia.com</a>.
+                          <a href="mailto:support@badiaprojectmanagement.com" style="color:#1a1a18; font-weight:600;">support@badiaprojectmanagement.com</a>.
                         </p>
                       </td>
                     </tr>
@@ -397,7 +397,7 @@ def send_plan_update_email(
               <tr>
                 <td style="background-color:#f5f5ee; border-top:1px solid #e8e8e0; padding:24px 40px; text-align:center;">
                   <p style="margin:0 0 6px; font-size:12px; color:#9a9a90; line-height:1.7;">
-                    Need help? Contact us at <a href="mailto:support@badia.com" style="color:#5a5a52;">support@badia.com</a>
+                    Need help? Contact us at <a href="mailto:support@badiaprojectmanagement.com" style="color:#5a5a52;">support@badiaprojectmanagement.com</a>
                   </p>
                   <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
                     &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
@@ -511,7 +511,7 @@ def send_plan_cancelled_by_admin_email(
                       <td style="background-color:#fdf2f2; border-left:3px solid #a32d2d; border-radius:0 4px 4px 0; padding:14px 18px;">
                         <p style="margin:0; font-size:13px; color:#3a3a36; line-height:1.6;">
                           A member of our team will contact you within <strong style="color:#1a1a18;">24 working hours</strong> to explain the reason for this cancellation and discuss your available options. If you have urgent questions, please reach out at
-                          <a href="mailto:support@badia.com" style="color:#a32d2d; font-weight:600;">support@badia.com</a>.
+                          <a href="mailto:support@badiaprojectmanagement.com" style="color:#a32d2d; font-weight:600;">support@badiaprojectmanagement.com</a>.
                         </p>
                       </td>
                     </tr>
@@ -524,7 +524,7 @@ def send_plan_cancelled_by_admin_email(
               <tr>
                 <td style="background-color:#f5f5ee; border-top:1px solid #e8e8e0; padding:24px 40px; text-align:center;">
                   <p style="margin:0 0 6px; font-size:12px; color:#9a9a90; line-height:1.7;">
-                    Need help? Contact us at <a href="mailto:support@badia.com" style="color:#5a5a52;">support@badia.com</a>
+                    Need help? Contact us at <a href="mailto:support@badiaprojectmanagement.com" style="color:#5a5a52;">support@badiaprojectmanagement.com</a>
                   </p>
                   <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
                     &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
