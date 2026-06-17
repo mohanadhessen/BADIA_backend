@@ -57,13 +57,7 @@ middleware_kwargs = dict(
 if settings.cors_regex:
     middleware_kwargs["allow_origin_regex"] = settings.cors_regex
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, **middleware_kwargs)
 
 
 app.include_router(register_router, prefix="/api/v1")

@@ -1,5 +1,5 @@
 from pwdlib import PasswordHash
-from jose import jwt
+import jwt
 from datetime import datetime, timedelta, timezone
 from config import settings
 from fastapi import HTTPException, status
@@ -79,7 +79,7 @@ def verify_refresh_token(token: str) -> dict:
             detail="Refresh token expired. Please sign in again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or malformed refresh token.",
