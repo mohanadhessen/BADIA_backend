@@ -8,9 +8,9 @@ from email_tokens import (
     verify_password_reset_token,
     create_email_verification_token
 )
-from email_service import send_password_reset_email , send_verification_email
+from email_service import send_password_reset_email , send_verification_email, send_contact_form_email
 from security import hash_password
-from schemas.auth import ForgotPasswordRequest , ResetPasswordRequest , VerificationRequest , VerifyEmailRequest
+from schemas.auth import ForgotPasswordRequest , ResetPasswordRequest , VerificationRequest , VerifyEmailRequest, ContactFormRequest
 from api.rate_limiter import limiter
 
 
@@ -111,3 +111,20 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
     db.commit()
 
     return {"message": "Password updated successfully"}
+
+
+@router.post("/contact")
+@limiter.limit("5/minute")
+def send_contact_form(
+    request: Request,
+    payload: ContactFormRequest,
+    background_tasks: BackgroundTasks
+):
+    background_tasks.add_task(
+        send_contact_form_email,
+        name=payload.name,
+        visitor_email=payload.email,
+        phone=payload.phone,
+        message=payload.message
+    )
+    return {"message": "Contact message sent successfully"}

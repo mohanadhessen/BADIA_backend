@@ -556,3 +556,47 @@ def send_plan_cancelled_by_admin_email(
         return None
 
 
+def send_contact_form_email(name: str, visitor_email: str, phone: str, message: str):
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <h2 style="color: #1a1a18; border-bottom: 2px solid #f5f5ee; padding-bottom: 10px; margin-top: 0;">New Contact Form Submission</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72; width: 120px;">Name</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;">{name}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72;">Email</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;"><a href="mailto:{visitor_email}" style="color: #1a1a18; text-decoration: none;">{visitor_email}</a></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72;">Phone</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18;">{phone}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; font-weight: bold; color: #7a7a72; vertical-align: top;">Message</td>
+                <td style="padding: 10px 0; border-bottom: 1px solid #f5f5ee; color: #1a1a18; white-space: pre-wrap; line-height: 1.6;">{message}</td>
+            </tr>
+        </table>
+        <div style="margin-top: 30px; font-size: 12px; color: #9a9a90; text-align: center; border-top: 1px solid #e8e8e0; padding-top: 15px;">
+            This email was generated from the Website Contact Form.
+        </div>
+    </div>
+    """
+
+    try:
+        res = resend.Emails.send({
+            "from": "website@badiaprojectmanagement.com",
+            "to": ["info@badiaprojectmanagement.com"],
+            "reply_to": visitor_email,
+            "subject": f"Website Contact Form - {name}",
+            "html": html,
+        })
+        _log_email("info@badiaprojectmanagement.com", f"Website Contact Form - {name}")
+        return res
+    except Exception as e:
+        print(f"Warning: Could not send contact form email: {e}")
+        return None
+
+
+

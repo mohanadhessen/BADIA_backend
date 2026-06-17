@@ -29,3 +29,10 @@ class VerifyEmailRequest(BaseModel):
 
 class VerificationRequest(BaseModel):
     email: EmailStr
+
+
+class ContactFormRequest(BaseModel):
+    name: str
+    email: EmailStr
+    phone: str
+    message: str
