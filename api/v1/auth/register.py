@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from database.session import get_db
 from schemas.user import UserRegister
@@ -14,7 +14,12 @@ router = APIRouter(tags=["Auth"])
 
 @router.post("/auth/register_local", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-def register_company(request: Request, user_in: UserRegister, db: Session = Depends(get_db)):
+def register_company(
+    request: Request,
+    user_in: UserRegister,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     existing_user = get_user_by_email(db, user_in.email)
     if existing_user:
         raise HTTPException(
@@ -35,10 +40,10 @@ def register_company(request: Request, user_in: UserRegister, db: Session = Depe
 
         try:
             token = create_email_verification_token(new_user.email)
-            send_verification_email(new_user.email, token)
+            background_tasks.add_task(send_verification_email, new_user.email, token)
         except Exception as e:
             # We don't want to crash registration if email fails
-            print(f"Warning: Could not send verification email to {new_user.email}: {e}")
+            print(f"Warning: Could not queue verification email to {new_user.email}: {e}")
 
         token_payload = {
             "sub": str(new_user.id),

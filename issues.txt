@@ -134,9 +134,10 @@ SECTION 5 - LARGER PROJECTS (days to weeks)
       are fixed - these need regression tests), file ownership checks,
       payments.
 
-18. Move email sending off the request path
+18. [DONE] Move email sending off the request path
     - Wrap Resend calls in FastAPI BackgroundTasks so registration/reset
       endpoints return immediately.
+
 
 19. Set up Alembic migrations
     - Generate an initial migration from current models, commit to

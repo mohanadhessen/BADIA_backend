@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from database.session import get_db
 from crud.user import get_user_by_email
@@ -20,7 +20,12 @@ router = APIRouter(tags=["email_services"])
 
 @router.post("/auth/request-verification")
 @limiter.limit("3/minute")
-def request_verification(request: Request, payload: VerificationRequest, db: Session = Depends(get_db)):
+def request_verification(
+    request: Request,
+    payload: VerificationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     user = get_user_by_email(db, payload.email)
     
     # If the user doesn't exist, or they are already verified, do nothing quietly (security best practice)
@@ -30,7 +35,7 @@ def request_verification(request: Request, payload: VerificationRequest, db: Ses
     # Generate token using your existing token utility
     token = create_email_verification_token(user.email) 
     # Send the email
-    send_verification_email(user.email, token) 
+    background_tasks.add_task(send_verification_email, user.email, token) 
     
     return {"message": "If the account exists and is unverified, a link has been sent."}
 
@@ -66,7 +71,12 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
 
 @router.post("/auth/forgot-password")
 @limiter.limit("3/minute")
-def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     user = get_user_by_email(db, payload.email)
 
     
@@ -74,7 +84,7 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
         return {"message": "If email exists, reset link was sent"}
 
     token = create_password_reset_token(payload.email)
-    send_password_reset_email(payload.email, token)
+    background_tasks.add_task(send_password_reset_email, payload.email, token)
 
     return {"message": "If email exists, reset link was sent"}
 

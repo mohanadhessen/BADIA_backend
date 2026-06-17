@@ -1,6 +1,6 @@
 import uuid
 from typing import List
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from database.session import get_db
 from ..dependencies import get_current_user
@@ -103,18 +103,77 @@ def submit_operational_partnership(
     }
 
 
+def process_feasibility_study_background(
+    current_user_id: int,
+    current_user_email: str,
+    current_user_company_name: str | None,
+    current_user_phone: str | None,
+    payload_dict: dict,
+    request_id: int,
+    file_id: str
+):
+    from database.session import SessionLocal
+    from models.request import Request as DBRequest
+    from crud.files import build_feasibility_pdf, upload_to_r2
+    from r2_client import s3
+    from config import settings
+
+    db = SessionLocal()
+    try:
+        class SimpleUser:
+            def __init__(self, email, company_name, phone):
+                self.email = email
+                self.company_name = company_name
+                self.phone = phone
+
+        class SimplePayload:
+            def __init__(self, data):
+                self.estimated_cost = data.get("estimated_cost")
+                self.funding_source = data.get("funding_source")
+                self.project_description = data.get("project_description")
+
+        user_obj = SimpleUser(current_user_email, current_user_company_name, current_user_phone)
+        payload_obj = SimplePayload(payload_dict)
+
+        pdf_buffer = build_feasibility_pdf(user_obj, payload_obj)
+        pdf_bytes = pdf_buffer.getvalue()
+        file_key = f"feasibility-studies/{current_user_id}/{file_id}.pdf"
+
+        upload_to_r2(
+            db=db,
+            s3=s3,
+            file_obj=pdf_buffer,
+            bucket_name=settings.R2_BUCKET,
+            file_key=file_key,
+            filename=f"feasibility_study_{file_id}.pdf",
+            content_type="application/pdf",
+            size=len(pdf_bytes),
+            request_id=request_id,
+            file_id=file_id
+        )
+    except Exception as e:
+        print(f"Background feasibility study upload failed: {e}")
+        req = db.query(DBRequest).filter(DBRequest.id == request_id).first()
+        if req:
+            db.delete(req)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/feasibility/submit")
 @limiter.limit("5/hour")
 def submit_feasibility_study(
     request: Request,
     payload: FeasibilityRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if get_existing_request(db, current_user.id, "feasibility_study"):
         raise HTTPException(409, "You already have a feasibility study request")
 
-    request = create_request(
+    new_request = create_request(
         db=db,
         user_id=current_user.id,
         service_type="feasibility_study"
@@ -122,42 +181,29 @@ def submit_feasibility_study(
 
     file_id = str(uuid.uuid4())
 
-    try:
-        # 1. generate PDF (replaces manual reportlab block)
-        pdf_buffer = build_feasibility_pdf(current_user, payload)
-        pdf_bytes = pdf_buffer.getvalue()
+    payload_dict = {
+        "estimated_cost": payload.estimated_cost,
+        "funding_source": payload.funding_source,
+        "project_description": payload.project_description
+    }
 
-        file_key = f"feasibility-studies/{current_user.id}/{file_id}.pdf"
+    background_tasks.add_task(
+        process_feasibility_study_background,
+        current_user.id,
+        current_user.email,
+        current_user.company_name,
+        current_user.phone,
+        payload_dict,
+        new_request.id,
+        file_id
+    )
 
-        # 2. upload to R2
-        created_file = upload_to_r2(
-            db=db,
-            s3=s3,
-            file_obj=pdf_buffer,
-            bucket_name=R2_BUCKET,
-            file_key=file_key,
-            filename=f"feasibility_study_{file_id}.pdf",
-            content_type="application/pdf",
-            size=len(pdf_bytes),
-            request_id=request.id,
-            file_id=file_id
-        )
-
-        return {
-            "status": "success",
-            "message": "Feasibility request submitted successfully",
-            "request_id": request.id,
-            "file_id": created_file.file_id,
-        }
-
-    except Exception as e:
-        db.delete(request)
-        db.commit()
-
-        if isinstance(e, HTTPException):
-            raise
-
-        raise HTTPException(500, f"Submission failed: {str(e)}")
+    return {
+        "status": "success",
+        "message": "Feasibility request submitted successfully",
+        "request_id": new_request.id,
+        "file_id": file_id,
+    }
 
 
 
