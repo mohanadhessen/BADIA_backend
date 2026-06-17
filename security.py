@@ -3,7 +3,7 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from config import settings
 from fastapi import HTTPException, status
-
+import hashlib
 
 
 SECRET_KEY = settings.TOKEN_SECRET_KEY
@@ -12,6 +12,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 pwd = PasswordHash.recommended()
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
 
 
 

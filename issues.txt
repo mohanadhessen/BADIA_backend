@@ -111,11 +111,12 @@ SECTION 4 - NEEDS CONFIRMATION (medium priority, verify then fix)
       workers/instances, check this against your DB plan's max connection
       limit so you don't get connection-exhaustion errors under load.
 
-15. RevokedToken stores the raw refresh token in plaintext
+15. [DONE] RevokedToken stores the raw refresh token in plaintext
     - models/revoked_token.py stores the full token string in the DB.
     - Minor defense-in-depth issue: if the DB is ever exposed/leaked, those
       rows contain live (if revoked) JWTs. Consider storing a hash of the
       token instead.
+
 
 16. Exception-message string matching for control flow
     - crud/files.py (update_files) signals "Forbidden" / "File not found" via

@@ -7,8 +7,8 @@ from security import  create_access_token , verify_password , create_refresh_tok
 from schemas.auth import TokenRefreshRequest, TokenResponse
 from api.rate_limiter import limiter
 from models.user import User
-from models.revoked_token import RevokedToken
 from api.dependencies import get_current_user
+
 from crud.revoked_token import (
     get_revoked_token,
     create_revoked_token,
@@ -57,9 +57,9 @@ def login(request: Request, user_in: LoginRequest, db: Session = Depends(get_db)
 @limiter.limit("10/minute")
 def refresh_access_token(request: Request, payload: TokenRefreshRequest, db: Session = Depends(get_db)):
 
-    is_revoked = db.query(RevokedToken).filter(RevokedToken.token == payload.refresh_token).first()
-    if is_revoked:
+    if is_token_revoked(db, payload.refresh_token):
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+
 
     decoded_data = verify_refresh_token(payload.refresh_token)
     old_refresh_token = payload.refresh_token
