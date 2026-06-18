@@ -13,21 +13,23 @@ venv/
 ENV/
 env/
 
-
 # Environment variables
 .env
 .env.*
 *.env
 
-
-
-# logs
+# Logs
 *.log
 logs/
 
-
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Documentation
+!requirements.txt
+!README.md
+*.txt
 *.md
