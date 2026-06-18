@@ -156,6 +156,7 @@ def get_user_endpoint(
 @router.get("/users/search/autocomplete")
 @limiter.limit("120/minute")
 def autocomplete_user_emails(
+    request: Request,
     q: str = "",
     db: Session = Depends(get_db)
 ):
@@ -174,6 +175,7 @@ def autocomplete_user_emails(
 @router.get("/users/search/results")
 @limiter.limit("30/minute")
 def search_user_by_email(
+    request: Request,
     email: str,
     db: Session = Depends(get_db)
 ):
