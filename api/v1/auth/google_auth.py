@@ -1,18 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException , Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 from database.session import get_db
-from crud.user import get_user_by_email , create_new_user
+from crud.user import get_user_by_email, create_new_user
 from config import settings
 import httpx
-from security import create_access_token , create_refresh_token
+from security import create_access_token, create_refresh_token
 from api.rate_limiter import limiter
-
+import secrets
 
 
 router = APIRouter(tags=["OAuth"])
 
+STATE_COOKIE_NAME = "oauth_state"
+STATE_COOKIE_MAX_AGE = 600
 
 
 GOOGLE_AUTH_ENDPOINT     = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -25,11 +27,10 @@ GOOGLE_REDIRECT_URL  = settings.GOOGLE_REDIRECT_URL
 FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
 
 
-
-
 @router.get("/google")
 @limiter.limit("10/minute")
-def login_google(request: Request):
+async def google_login(request: Request):
+    state = secrets.token_urlsafe(32)
 
     query_params = {
         "client_id":     GOOGLE_CLIENT_ID,
@@ -38,19 +39,34 @@ def login_google(request: Request):
         "scope":         "openid email profile",
         "access_type":   "offline",
         "prompt":        "consent",
+        "state":         state,
     }
     url = f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(query_params)}"
-    return RedirectResponse(url)
 
+    response = RedirectResponse(url)
+    response.set_cookie(
+        key=STATE_COOKIE_NAME,
+        value=state,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=STATE_COOKIE_MAX_AGE,
+    )
+    return response
 
 
 @router.get("/google/callback")
 @limiter.limit("10/minute")
 async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    cookie_state = request.cookies.get(STATE_COOKIE_NAME)
 
     if not code:
         raise HTTPException(status_code=400, detail="Missing code")
+
+    if not state or not cookie_state or not secrets.compare_digest(cookie_state, state):
+        raise HTTPException(status_code=400, detail="Invalid or missing state parameter")
 
     async with httpx.AsyncClient() as client:
         # 1. Exchange code → token
@@ -76,10 +92,10 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
             GOOGLE_USERINFO_ENDPOINT,
             headers={"Authorization": f"Bearer {google_access_token}"},
         )
-        
+
         if user_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to fetch user info from Google")
-            
+
         user_data = user_res.json()
 
     email = user_data.get("email")
@@ -94,7 +110,6 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
     existing_user = get_user_by_email(db, email)
 
     if existing_user:
-        # If they exist but haven't linked Google yet, link it now
         if not existing_user.google_id:
             existing_user.google_id = google_id
             existing_user.avatar_url = avatar_url or existing_user.avatar_url
@@ -102,7 +117,6 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
             db.refresh(existing_user)
         user = existing_user
     else:
-        # Create the new OAuth user
         user = create_new_user(
             db=db,
             email=email,
@@ -113,22 +127,21 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
             auth_provider="google"
         )
 
-    # Prepare token payload
     token_payload = {
         "sub": str(user.id),
         "email": user.email,
         "role": user.role
     }
 
-    # Generate backend application tokens
     access_token = create_access_token(data=token_payload)
     refresh_token = create_refresh_token(data=token_payload)
-    
 
     redirect_url = (
         f"{FRONTEND_ACCOUNT_URL}"
         f"?access_token={access_token}"
         f"&refresh_token={refresh_token}"
     )
-    
-    return RedirectResponse(url=redirect_url)
+
+    response = RedirectResponse(url=redirect_url)
+    response.delete_cookie(STATE_COOKIE_NAME)
+    return response

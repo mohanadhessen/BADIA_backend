@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from schemas.user import UserRegister
 from crud.user import get_user_by_email , create_new_user
-from security import hash_password , create_access_token
+from security import hash_password , create_access_token , create_refresh_token
 from api.rate_limiter import limiter
 from email_tokens import create_email_verification_token
 from email_service import send_verification_email
@@ -52,10 +52,12 @@ def register_company(
         }
 
         access_token = create_access_token(data=token_payload)
+        new_refresh_token = create_refresh_token(data=token_payload)
         return {
             "status": "success",
             "message": "Company account created",
             "access_token": access_token,
+            "refresh_token": new_refresh_token,
             "token_type": "bearer",
             "company": new_user.company_name,
         }

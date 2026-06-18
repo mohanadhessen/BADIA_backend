@@ -28,8 +28,11 @@ logs/
 *.swp
 *.swo
 
-# Documentation
-!requirements.txt
-!README.md
-*.txt
+# ignore all markdown and text files
 *.md
+*.txt
+
+
+# keep these
+!README.md
+!requirements.txt
