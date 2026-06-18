@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
+import sentry_sdk
 from database.session import get_db
 from schemas.user import UserRegister
 from crud.user import get_user_by_email , create_new_user
@@ -43,7 +44,7 @@ def register_company(
             background_tasks.add_task(send_verification_email, new_user.email, token)
         except Exception as e:
             # We don't want to crash registration if email fails
-            print(f"Warning: Could not queue verification email to {new_user.email}: {e}")
+            sentry_sdk.capture_exception(e)
 
         token_payload = {
             "sub": str(new_user.id),
@@ -62,8 +63,9 @@ def register_company(
             "company": new_user.company_name,
         }
 
-    except Exception:
+    except Exception as e:
         db.rollback()
+        sentry_sdk.capture_exception(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error during registration",

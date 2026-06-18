@@ -8,8 +8,7 @@ import io
 from reportlab.lib.pagesizes import letter
 import uuid
 from crud.request import Request
-
-
+import sentry_sdk
 class FileRecordNotFoundError(Exception):
     pass
 
@@ -136,7 +135,7 @@ def delete_from_r2(
         )
         return True
     except Exception as e:
-        print(f"Failed to delete file from R2: {file_key} | {str(e)}")
+        sentry_sdk.capture_exception(e)
         return False
     
 

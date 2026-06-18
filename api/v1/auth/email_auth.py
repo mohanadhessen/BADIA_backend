@@ -12,6 +12,8 @@ from email_service import send_password_reset_email , send_verification_email, s
 from security import hash_password
 from schemas.auth import ForgotPasswordRequest , ResetPasswordRequest , VerificationRequest , VerifyEmailRequest, ContactFormRequest
 from api.rate_limiter import limiter
+import sentry_sdk
+
 
 
 
@@ -62,8 +64,16 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
     if user.is_email_verified:
         return {"message": "Already verified"}
 
-    user.is_email_verified = True
-    db.commit()
+    try:
+        user.is_email_verified = True
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        sentry_sdk.capture_exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error verifying email",
+        )
 
     return {"message": "Email verified successfully"}
 
@@ -109,8 +119,16 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
             detail="User not found"
         )
 
-    user.password_hash = hash_password(payload.new_password)
-    db.commit()
+    try:
+        user.password_hash = hash_password(payload.new_password)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        sentry_sdk.capture_exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error resetting password",
+        )
 
     return {"message": "Password updated successfully"}
 

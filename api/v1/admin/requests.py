@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+import sentry_sdk
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
@@ -142,6 +143,7 @@ def download_request_file(
             ExpiresIn=300
         )
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(500, f"Could not generate download URL: {str(e)}")
 
     return JSONResponse({

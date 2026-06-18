@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request , Response
 from sqlalchemy.orm import Session
+import sentry_sdk
 from schemas.user import UserUpdate, UserPasswordReset
 from database.session import get_db 
 from api.dependencies import get_current_user
@@ -12,6 +13,7 @@ from crud.review import get_reviews_by_user
 from config import settings
 from r2_client import s3
 from api.rate_limiter import limiter
+
 
 
 R2_BUCKET = settings.R2_BUCKET
@@ -309,6 +311,7 @@ def download_my_file(
             ExpiresIn=300
         )
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(500, f"Could not generate download URL: {str(e)}")
 
     from fastapi.responses import JSONResponse

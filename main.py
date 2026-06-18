@@ -23,6 +23,28 @@ from api.v1.admin.payments import router as admin_notifications_router
 from api.v1.admin.dashboard import router as admin_dashboard_router
 
 from config import settings
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+
+
+sentry_dsn = settings.SENTRY_DSN
+
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        send_default_pii=True,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        integrations=[
+            FastApiIntegration(),
+        ],
+    )
+
+    sentry_sdk.capture_message("Sentry initialized", level="info")
+
+
+
+
 
 
 app = FastAPI(
@@ -36,6 +58,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.get("/sentry-test")
+def sentry_test():
+    raise Exception("Sentry is working!")
 
 @app.get("/")
 async def root():

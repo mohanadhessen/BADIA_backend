@@ -1,6 +1,7 @@
 import uuid
 import re
 from typing import List
+import sentry_sdk
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from database.session import get_db
@@ -108,6 +109,7 @@ def submit_operational_partnership(
         db.commit()
         if isinstance(e, HTTPException):
             raise
+        sentry_sdk.capture_exception(e)
         raise HTTPException(500, f"Upload failed: {str(e)}")
 
     return {
@@ -166,7 +168,7 @@ def process_feasibility_study_background(
             file_id=file_id
         )
     except Exception as e:
-        print(f"Background feasibility study upload failed: {e}")
+        sentry_sdk.capture_exception(e)
         req = db.query(DBRequest).filter(DBRequest.id == request_id).first()
         if req:
             db.delete(req)
@@ -251,6 +253,7 @@ async def update_operational_partnership_file(
     except FileRecordNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
 
     return updated
@@ -283,6 +286,7 @@ async def update_feasibility_file(
     except FileRecordNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
 
     return updated

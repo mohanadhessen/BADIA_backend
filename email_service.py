@@ -1,3 +1,4 @@
+import sentry_sdk
 import resend
 from config import settings
 from datetime import datetime,timezone
@@ -12,7 +13,7 @@ def _log_email(email: str, subject: str):
     try:
         log_email_sent(db, email, subject)
     except Exception as e:
-        print(f"Warning: Could not log email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
     finally:
         db.close()
 def send_verification_email(email: str, token: str):
@@ -54,7 +55,7 @@ def send_verification_email(email: str, token: str):
         _log_email(email, "Verify your email")
         return res
     except Exception as e:
-        print(f"Warning: Could not send verification email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 def send_password_reset_email(email: str, token: str):
@@ -96,7 +97,7 @@ def send_password_reset_email(email: str, token: str):
         _log_email(email, "Password Reset")
         return res
     except Exception as e:
-        print(f"Warning: Could not send password reset email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -282,7 +283,7 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
         _log_email(email, subject)
         return res
     except Exception as e:
-        print(f"Warning: Could not send request status email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -427,7 +428,7 @@ def send_plan_update_email(
         _log_email(email, f"Plan Updated — {plan_name} is now active")
         return res
     except Exception as e:
-        print(f"Warning: Could not send plan update email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 def send_plan_cancelled_by_admin_email(
@@ -554,7 +555,7 @@ def send_plan_cancelled_by_admin_email(
         _log_email(email, f"Your {plan_name} Subscription Has Been Cancelled")
         return res
     except Exception as e:
-        print(f"Warning: Could not send plan cancelled email to {email}: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 
@@ -663,7 +664,7 @@ def send_contact_form_email(name: str, visitor_email: str, phone: str, message: 
         _log_email("info@badiaprojectmanagement.com", f"Website Contact Form - {name}")
         return res
     except Exception as e:
-        print(f"Warning: Could not send contact form email: {e}")
+        sentry_sdk.capture_exception(e)
         return None
 
 

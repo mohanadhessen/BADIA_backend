@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
+import sentry_sdk
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
@@ -49,6 +50,7 @@ def get_storage_usage_safe():
             "total_files": total_files,
         }
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         return {
             "error": f"Failed to retrieve storage usage: {str(e)}",
             "used_bytes": 0,
