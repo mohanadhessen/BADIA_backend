@@ -1,4 +1,5 @@
 import uuid
+import re
 from typing import List
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -21,6 +22,17 @@ from api.rate_limiter import limiter
 
 
 R2_BUCKET = settings.R2_BUCKET
+
+def sanitize_filename(filename: str) -> str:
+    if not filename:
+        return "unnamed.pdf"
+    # Keep alphanumeric, dot, dash, underscore
+    safe = re.sub(r'[^a-zA-Z0-9.\-_]', '_', filename)
+    # Prevent directory traversal
+    safe = safe.lstrip('.').strip()
+    if not safe:
+        return "file.pdf"
+    return safe[:100]
 
 router = APIRouter(tags=["files"])
 
@@ -45,6 +57,8 @@ def submit_operational_partnership(
     for file in files:
         if not file.filename:
             raise HTTPException(400, "Empty file")
+            
+        file.filename = sanitize_filename(file.filename)
         if not file.content_type or "pdf" not in file.content_type.lower():
             raise HTTPException(400, "Only PDF allowed")
 
@@ -219,6 +233,7 @@ async def update_operational_partnership_file(
     current_user: User = Depends(get_current_user),
 ):
     file_bytes = await file.read()
+    sanitized_filename = sanitize_filename(file.filename)
 
     try:
         updated = update_files(
@@ -227,7 +242,7 @@ async def update_operational_partnership_file(
             db_session=db,
             file_id=file_id,
             new_file_bytes=file_bytes,
-            new_filename=file.filename,
+            new_filename=sanitized_filename,
             new_content_type=file.content_type,
             user_id=current_user.id,
         )
