@@ -28,20 +28,6 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 
 
-sentry_dsn = settings.SENTRY_DSN
-
-if sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        send_default_pii=True,
-        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-        integrations=[
-            FastApiIntegration(),
-        ],
-    )
-
-    sentry_sdk.capture_message("Sentry initialized", level="info")
-
 
 
 
@@ -54,14 +40,27 @@ app = FastAPI(
     openapi_url=None
 )
 
+sentry_dsn = settings.SENTRY_DSN
+
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        send_default_pii=False,
+        integrations=[
+            FastApiIntegration(),
+        ],
+    )
+
+
+
+
+
 # SlowAPI rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-@app.get("/sentry-test")
-def sentry_test():
-    raise Exception("Sentry is working!")
+
 
 @app.get("/")
 async def root():

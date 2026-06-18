@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     cors_origins: Union[List[str], str]
     cors_regex: Optional[str] = None
 
+
     SENTRY_DSN: Optional[str] = None
-    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
-    LOG_LEVEL: str = "INFO"
+
 
     @field_validator("cors_origins", mode="before")
     @classmethod
