@@ -27,9 +27,9 @@ from config import settings
 
 app = FastAPI(
     title="BADIA API",
-    # docs_url=None,
-    # redoc_url=None,
-    # openapi_url=None
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
 )
 
 # SlowAPI rate limiter
