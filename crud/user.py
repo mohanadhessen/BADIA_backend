@@ -39,7 +39,7 @@ def create_new_user(
     new_user = User(
         first_name=first_name,
         last_name=last_name,
-        company_name=company_name or "Not Provided", # Fallback if your DB column is nullable=False
+        company_name=company_name or "", # Fallback if your DB column is nullable=False
         email=email,
         password_hash=password, # Ensure this is pre-hashed for 'local' users before calling this function
         google_id=google_id,
