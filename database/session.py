@@ -2,6 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config import settings
 
+connect_args = {}
+if settings.ENV == "production":
+    connect_args["ssl"] = {"ssl_mode": "VERIFY_IDENTITY"}
+
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
@@ -9,9 +13,7 @@ engine = create_engine(
     max_overflow=20,
     pool_timeout=15,
     pool_recycle=300,  
-    connect_args={
-        "ssl": {"ssl_mode": "VERIFY_IDENTITY"}
-    }
+    connect_args=connect_args
 )
 
 

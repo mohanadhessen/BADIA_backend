@@ -7,7 +7,7 @@ from api.dependencies import get_current_user
 from models.user import User
 from crud.user import update_user_data, delete_user, update_user_password
 from security import verify_password, hash_password
-from models.UserFile import UserFile
+from models.user_file import UserFile
 from crud.request import get_request_by_id, delete_request, get_user_requests
 from crud.review import get_reviews_by_user
 from config import settings

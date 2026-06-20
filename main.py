@@ -32,6 +32,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 
 
+IS_PROD = settings.ENV == "production"
 
 app = FastAPI(
     title="BADIA API",
@@ -44,14 +45,16 @@ app = FastAPI(
     license_info={
         "name": "Proprietary",
     },
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
+
+    docs_url=None if IS_PROD else "/docs",
+    redoc_url=None if IS_PROD else "/redoc",
+    openapi_url=None if IS_PROD else "/openapi.json",
 )
+
 
 sentry_dsn = settings.SENTRY_DSN
 
-if sentry_dsn:
+if sentry_dsn and settings.ENV == "production":
     sentry_sdk.init(
         dsn=sentry_dsn,
         send_default_pii=False,

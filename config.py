@@ -6,6 +6,7 @@ import json
 
 
 class Settings(BaseSettings):
+    ENV: str = "production"
     cors_origins: Union[List[str], str]
     cors_regex: Optional[str] = None
     
@@ -70,3 +71,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+
+
+
+
+

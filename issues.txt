@@ -1,0 +1,92 @@
+BADIA - FIX TRACKER (backend + frontend)
+==========================================
+
+BACKEND
+=======
+
+DONE
+----
+[x] Removed unauthenticated DELETE /api/v1/auth/flush-revoked entirely
+[x] POST /api/v1/auth/revoke now requires auth + verifies token ownership
+    (decodes refresh token, checks sub == current_user.id), rate limited
+[x] JWT access/refresh type confusion fixed - create_access_token() sets
+    "type": "access"; get_current_user() rejects tokens without it
+[x] algorithms=ALGORITHM -> algorithms=[ALGORITHM] fixed in
+    verify_refresh_token()
+[x] Refresh token rotation implemented; lifetime shortened 180 -> 30 days
+[x] CORS dead-code bug fixed (**middleware_kwargs now actually used,
+    cors_regex takes effect); cors_origins field_validator confirmed solid
+[x] FRONTEND_ACCOUNT_URL is now required, no stale workers.dev default
+[x] /docs, /redoc, /openapi.json disabled in production
+[x] Dead/duplicate dependencies removed: psycopg2-binary, aiosqlite,
+    passlib, argon2-cffi, python-jose
+[x] Debug scripts removed from repo root (check_user.py,
+    populate_email_metrics.py)
+[x] DB driver confusion resolved - confirmed mysql+pymysql (TiDB Cloud) is
+    the only driver, psycopg2 red herring gone
+[x] pool_recycle=300 added to database/session.py (TiDB Cloud recommended
+    setting); pool_size/max_overflow confirmed fine vs TiDB's 400
+    concurrent connection limit
+[x] crud/files.py uses custom FileRecordNotFoundError /
+    FileAccessForbiddenError exception classes instead of string matching
+[x] Email sending moved to BackgroundTasks (register, email_auth, requests,
+    admin/requests, admin/payments)
+[x] Google OAuth CSRF "state" parameter added - random state via
+    secrets.token_urlsafe(32), stored in httpOnly/secure/SameSite=Lax
+    cookie, verified with secrets.compare_digest before code exchange
+[x] register.py now returns both access_token and refresh_token
+[x] RevokedToken now stores hash_token() (SHA-256) output instead of the
+    raw refresh token; legacy fallback check against raw token kept for
+    rows revoked before this change
+[x] Production error monitoring added - Sentry, error-collection only:
+    send_default_pii=False, no traces_sample_rate (no APM/metrics), no
+    leftover debug endpoint or init-confirmation message
+[x] Alembic migrations added & verified (MySQL/TiDB compatible with dynamic constraint handling)
+
+OPEN
+----
+[ ] No pytest + httpx test suite
+[ ] Still sync SQLAlchemy + pymysql, no real async DB layer (a couple of
+    isolated async def routes only)
+[ ] Admin dashboard: get_storage_usage_safe() does a full uncached R2
+    bucket scan on every load - needs caching (5-15 min TTL)
+[ ] Admin dashboard: compute_global_db_etag() runs 14 sequential queries
+    (2 x 7 models) for the ETag precheck - collapse into one query
+[ ] Admin dashboard: admin_get_all_* crud functions each do separate
+    count + select queries - combine via window function (lower priority,
+    real fix is async + concurrent queries once the async migration lands)
+
+
+FRONTEND
+========
+
+DONE
+----
+[x] Removed dead Signin.html (auth moved to modal in index.html)
+[x] Systemic stored XSS in admin.js fully fixed - checked every render
+    function (renderUsersCards, renderRequests, renderReviews,
+    renderPlansAdmin, renderPaymentsTable, renderDashboard), all now route
+    through escapeHtml() or data-attribute + addEventListener instead of
+    raw template-literal interpolation into innerHTML/onclick. The
+    filename JS-context-breakout case specifically fixed via data-fname +
+    addEventListener (the architecturally correct fix, not just escaping).
+    Only remaining inline onclick interpolation is _toggleFeat(${i})/
+    _deleteFeat(${i}) - i is a numeric array index, not user data, no risk.
+[x] Uploaded filenames now sanitized at upload time (BADIA_backend,
+    api/v1/requests.py) - sanitize_filename() strips anything outside
+    a-zA-Z0-9.-_ to underscore, handles empty/dot-only edge cases, caps
+    length at 100 chars. Confirmed actually wired into both upload call
+    sites (file.filename reassigned before use), not just defined.
+
+OPEN
+----
+[x] access_token and refresh_token still stored in localStorage. Lower
+    urgency now that the XSS holes are closed, but still worth moving to
+    httpOnly cookies eventually (needs SameSite=None; Secure + CSRF
+    protection since frontend/backend are on different domains)
+[x] google_auth.py callback still returns tokens via redirect URL query
+    string - lands in browser history + Render/Cloudflare access logs.
+    Revisit alongside the cookie migration above.
+[x][fixed on backend by sanitizing the names] File upload filenames not sanitized/restricted at upload time - lower
+    priority now that rendering is fixed, but still worth normalizing as
+    defense in depth

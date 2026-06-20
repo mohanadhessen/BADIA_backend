@@ -7,7 +7,7 @@ from api.etag import compute_etag, check_etag, compute_db_etag
 from r2_client import s3
 from config import settings
 from crud.email_metric import get_emails_metric
-from models.UserFile import UserFile
+from models.user_file import UserFile
 from models.email_metric import EmailMetric
 
 router = APIRouter(

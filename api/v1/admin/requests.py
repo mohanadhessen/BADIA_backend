@@ -11,7 +11,7 @@ from crud.request import get_request_by_id, delete_request, admin_get_all_reques
 from email_service import send_request_status_email
 from schemas.admin import StatusUpdate
 from schemas.request import AdminRequestResponse
-from models.UserFile import UserFile
+from models.user_file import UserFile
 from r2_client import s3
 from config import settings
 

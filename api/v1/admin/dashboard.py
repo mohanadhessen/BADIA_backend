@@ -14,7 +14,7 @@ from models.review import Review
 from models.request import Request as DBRequest
 from models.payment import Payment
 from models.email_metric import EmailMetric
-from models.UserFile import UserFile
+from models.user_file import UserFile
 
 from crud.user import admin_get_all_users, get_users_plans_distribution
 from crud.review import admin_get_all_review

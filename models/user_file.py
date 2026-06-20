@@ -5,7 +5,7 @@ from database.base import Base
 
 
 class UserFile(Base):
-    __tablename__ = "UserFile"
+    __tablename__ = "user_files"
 
     id = Column(Integer, primary_key=True)
     request_id = Column(Integer, ForeignKey("requests.id"), nullable=False, index=True)

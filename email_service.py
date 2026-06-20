@@ -4,6 +4,9 @@ from config import settings
 from datetime import datetime,timezone
 from database.session import SessionLocal
 from crud.email_metric import log_email_sent
+import html
+
+
 
 resend.api_key = settings.RESEND_API_KEY
 FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
@@ -104,7 +107,8 @@ def send_password_reset_email(email: str, token: str):
 
 
 def send_request_status_email(email: str, user_name: str, service_type: str, is_approved: str):
-    # Set dynamic variables based on the approval status
+    user_name = html.escape(user_name)
+    service_type = html.escape(service_type)
     if is_approved == "approved":
         page_title = "Request Approved"
         icon_bg = "#e8f5e2"
@@ -295,6 +299,8 @@ def send_plan_update_email(
     billing_cycle: str,
     transaction_id: str = None,
 ):
+    user_name = html.escape(user_name)
+    plan_name = html.escape(plan_name)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     transaction_row = ""
@@ -436,6 +442,8 @@ def send_plan_cancelled_by_admin_email(
     user_name: str,
     plan_name: str,
 ):
+    user_name = html.escape(user_name)
+    plan_name = html.escape(plan_name)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     html = f"""
@@ -560,8 +568,11 @@ def send_plan_cancelled_by_admin_email(
 
 
 def send_contact_form_email(name: str, visitor_email: str, phone: str, message: str):
-    phone_display = phone if phone else "—"
-    html = f"""<!DOCTYPE html>
+    name = html.escape(name)
+    visitor_email = html.escape(visitor_email)
+    phone_display = html.escape(phone) if phone else "—"
+    message = html.escape(message)
+    email_html  = f"""<!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
@@ -659,7 +670,7 @@ def send_contact_form_email(name: str, visitor_email: str, phone: str, message: 
             "to": ["info@badiaprojectmanagement.com"],
             "reply_to": visitor_email,
             "subject": f"Website Contact Form - {name}",
-            "html": html,
+            "html": email_html ,
         })
         _log_email("info@badiaprojectmanagement.com", f"Website Contact Form - {name}")
         return res
