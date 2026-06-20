@@ -35,7 +35,18 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 app = FastAPI(
     title="BADIA API",
-
+    description="Official API for the BADIA platform.",
+    version="1.0.0",
+    contact={
+        "name": "BADIA Support",
+        "email": "support@badiaprojectmanagement.com",
+    },
+    license_info={
+        "name": "Proprietary",
+    },
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 sentry_dsn = settings.SENTRY_DSN
