@@ -7,9 +7,9 @@ from api.etag import compute_etag, check_etag, compute_db_etag
 from models.payment import Payment
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
-from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id
+from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id, get_payments_by_user_email
 from email_service import send_plan_update_email , send_plan_cancelled_by_admin_email
-from schemas.payment import PaymentBase , PaymentUpdate
+from schemas.payment import PaymentBase , PaymentUpdate, AdminPaymentResponse
 
 
 
@@ -31,7 +31,7 @@ def get_all_payments(
     db: Session = Depends(get_db)
 ):
     filters = [Payment.status == status] if status else None
-    etag = compute_db_etag(db, Payment, page=page, limit=limit, filters=filters, order_by=Payment.created_at.desc())
+    etag = compute_db_etag(db, Payment, page=page, limit=limit, filters=filters, order_by=(Payment.created_at.desc(), Payment.id.desc()))
     check_etag(request, etag)
 
     data = admin_get_all_payments(
@@ -42,6 +42,22 @@ def get_all_payments(
     )
     response.headers["ETag"] = etag
     return data
+
+
+@router.get("/payments/by-email", response_model=list[AdminPaymentResponse])
+@limiter.limit("60/minute")
+def get_payments_by_email_endpoint(
+    request: Request,
+    email: str,
+    db: Session = Depends(get_db)
+):
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email query parameter is required"
+        )
+    payments = get_payments_by_user_email(db, email)
+    return payments
 
 
 

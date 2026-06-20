@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from models.request import Request
-from sqlalchemy.orm import Session 
 from sqlalchemy.exc import IntegrityError
 import uuid
 
@@ -42,6 +42,18 @@ def get_user_requests(db: Session, user_id: int):
         db.query(Request)
         .options(joinedload(Request.files))
         .filter(Request.user_id == user_id)
+        .order_by(Request.created_at.desc())
+        .all()
+    )
+
+
+def get_requests_by_user_email(db: Session, email: str):
+    from models.user import User
+    return (
+        db.query(Request)
+        .join(User, Request.user_id == User.id)
+        .filter(User.email == email)
+        .options(joinedload(Request.user), joinedload(Request.files))
         .order_by(Request.created_at.desc())
         .all()
     )
@@ -112,19 +124,24 @@ def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
 
     offset = (page - 1) * limit
 
+    total_requests = db.query(func.count(Request.id)).scalar() or 0
+    pending_requests = db.query(func.count(Request.id)).filter(Request.status == "pending").scalar() or 0
+    approved_requests = db.query(func.count(Request.id)).filter(Request.status == "approved").scalar() or 0
+    rejected_requests = db.query(func.count(Request.id)).filter(Request.status == "rejected").scalar() or 0
+
     requests = (
         db.query(Request)
         .options(
             joinedload(Request.user),
             joinedload(Request.files)
         )
-        .order_by(Request.created_at.desc())
+        .order_by(Request.created_at.desc(), Request.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
 
-    return [
+    items = [
         {
             "request_id": r.id,
             "user_id": r.user_id,
@@ -157,3 +174,16 @@ def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
         }
         for r in requests
     ]
+
+    return {
+        "metrics": {
+            "total_requests": total_requests,
+            "pending_requests": pending_requests,
+            "approved_requests": approved_requests,
+            "rejected_requests": rejected_requests
+        },
+        "page": page,
+        "limit": limit,
+        "has_next": offset + limit < total_requests,
+        "items": items
+    }

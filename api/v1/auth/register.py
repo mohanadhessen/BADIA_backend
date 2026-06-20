@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks , Response
 from sqlalchemy.orm import Session
 import sentry_sdk
 from database.session import get_db
 from schemas.user import UserRegister
 from crud.user import get_user_by_email , create_new_user
-from security import hash_password , create_access_token , create_refresh_token
+from security import hash_password , create_access_token , create_refresh_token , set_auth_cookies
 from api.rate_limiter import limiter
 from email_tokens import create_email_verification_token
 from email_service import send_verification_email
@@ -13,13 +13,14 @@ from email_service import send_verification_email
 
 router = APIRouter(tags=["Auth"])
 
-@router.post("/auth/register_local", status_code=status.HTTP_201_CREATED)
+@router.post("/auth/register_local", status_code=201)
 @limiter.limit("5/minute")
 def register_company(
     request: Request,
+    response: Response,           
     user_in: UserRegister,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     existing_user = get_user_by_email(db, user_in.email)
     if existing_user:
@@ -43,22 +44,19 @@ def register_company(
             token = create_email_verification_token(new_user.email)
             background_tasks.add_task(send_verification_email, new_user.email, token)
         except Exception as e:
-            # We don't want to crash registration if email fails
             sentry_sdk.capture_exception(e)
 
         token_payload = {
             "sub": str(new_user.id),
-            "email": new_user.email,
-            "role": new_user.role
         }
-
-        access_token = create_access_token(data=token_payload)
+        access_token      = create_access_token(data=token_payload)
         new_refresh_token = create_refresh_token(data=token_payload)
+    
+        set_auth_cookies(response, access_token, new_refresh_token, role=new_user.role)
+    
         return {
             "status": "success",
             "message": "Company account created",
-            "access_token": access_token,
-            "refresh_token": new_refresh_token,
             "token_type": "bearer",
             "company": new_user.company_name,
         }

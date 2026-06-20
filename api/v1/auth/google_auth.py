@@ -6,7 +6,7 @@ from database.session import get_db
 from crud.user import get_user_by_email, create_new_user
 from config import settings
 import httpx
-from security import create_access_token, create_refresh_token
+from security import create_access_token, create_refresh_token , set_auth_cookies
 from api.rate_limiter import limiter
 import secrets
 
@@ -50,7 +50,7 @@ async def google_login(request: Request):
         key=STATE_COOKIE_NAME,
         value=state,
         httponly=True,
-        secure=True,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         max_age=STATE_COOKIE_MAX_AGE,
     )
@@ -128,22 +128,17 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
             avatar_url=avatar_url,
             auth_provider="google"
         )
-
     token_payload = {
         "sub": str(user.id),
-        "email": user.email,
-        "role": user.role
     }
-
-    access_token = create_access_token(data=token_payload)
+    access_token  = create_access_token(data=token_payload)
     refresh_token = create_refresh_token(data=token_payload)
 
-    redirect_url = (
-        f"{FRONTEND_ACCOUNT_URL}"
-        f"?access_token={access_token}"
-        f"&refresh_token={refresh_token}"
-    )
 
-    response = RedirectResponse(url=redirect_url)
-    response.delete_cookie(STATE_COOKIE_NAME)
-    return response
+    redirect_url = f"{FRONTEND_ACCOUNT_URL}?logged_in=1"
+    redirect_response = RedirectResponse(url=redirect_url)
+    redirect_response.delete_cookie(STATE_COOKIE_NAME)
+
+    set_auth_cookies(redirect_response, access_token, refresh_token, role=user.role)
+
+    return redirect_response

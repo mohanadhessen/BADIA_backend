@@ -68,14 +68,14 @@ def get_dashboard_data(
     request: Request,
     response: Response,
     users_page: int = 1,
-    users_limit: int = 25,
+    users_limit: int = 5,
     users_only_active: bool = False,
     reviews_page: int = 1,
-    reviews_limit: int = 25,
+    reviews_limit: int = 5,
     requests_page: int = 1,
-    requests_limit: int = 25,
+    requests_limit: int = 5,
     payments_page: int = 1,
-    payments_limit: int = 25,
+    payments_limit: int = 5,
     payments_status: str | None = None,
     db: Session = Depends(get_db)
 ):
@@ -94,7 +94,8 @@ def get_dashboard_data(
     reviews_data = admin_get_all_review(
         db=db,
         page=reviews_page,
-        limit=reviews_limit
+        limit=reviews_limit,
+        pending_only=True
     )
     requests_data = admin_get_all_requests(
         db=db,

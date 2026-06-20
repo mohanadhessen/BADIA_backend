@@ -22,3 +22,28 @@ class ReviewResponse(BaseModel):
     is_published: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ReviewUserSchema(BaseModel):
+    id: int
+    email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AdminReviewResponse(BaseModel):
+    id: int
+    stars: int
+    review_text: str
+    user_id: int
+    is_published: bool
+    created_at: datetime
+    updated_at: datetime
+    user: Optional[ReviewUserSchema] = None
+
+    class Config:
+        from_attributes = True

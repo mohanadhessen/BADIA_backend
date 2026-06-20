@@ -19,6 +19,17 @@ def get_payment_by_user_id(
         query = query.filter(Payment.status == status)
 
     return query.order_by(Payment.created_at.desc()).all()
+
+
+def get_payments_by_user_email(db: Session, email: str):
+    return (
+        db.query(Payment)
+        .join(User, Payment.user_id == User.id)
+        .filter(User.email == email)
+        .options(joinedload(Payment.user), joinedload(Payment.plan))
+        .order_by(Payment.created_at.desc())
+        .all()
+    )
     
 
 def create_payment(db: Session, data: PaymentBase, billing_cycle: str):
@@ -183,7 +194,7 @@ def admin_get_all_payments(
 
     payments = (
         query
-        .order_by(Payment.created_at.desc())
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
         .offset(offset)
         .limit(limit)
         .all()

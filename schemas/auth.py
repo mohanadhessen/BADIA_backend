@@ -3,14 +3,7 @@ from typing import Optional
 
 
 
-class TokenRefreshRequest(BaseModel):
-    refresh_token: str
 
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: Optional[str] = None
-    token_type: str = "bearer"
 
 
 
@@ -35,4 +28,4 @@ class ContactFormRequest(BaseModel):
     name: str
     email: EmailStr
     phone: str
-    message: str
+    message: str

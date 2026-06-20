@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator , ConfigDict
 from urllib.parse import quote_plus
 from typing import List, Optional, Union
 import json
@@ -8,9 +8,21 @@ import json
 class Settings(BaseSettings):
     cors_origins: Union[List[str], str]
     cors_regex: Optional[str] = None
+    
+    COOKIE_DOMAIN: str = None
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: bool = False
+    
+    ACCESS_TOKEN_COOKIE_NAME: str = "access_token"
+    REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
+    CSRF_COOKIE_NAME: str = "csrf_token"
+    ROLE_COOKIE_NAME: str = "badia_role"
 
 
-    SENTRY_DSN: Optional[str] = None
+
+
+
+    SENTRY_DSN: str
 
 
     @field_validator("cors_origins", mode="before")
@@ -46,9 +58,7 @@ class Settings(BaseSettings):
 
     FRONTEND_ACCOUNT_URL: str
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
     @property
     def database_url(self):

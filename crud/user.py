@@ -12,8 +12,12 @@ from security import hash_password
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
+def admin_get_user_by_email(db: Session, email: str) -> Optional[User]:
+    return db.query(User).filter(User.email == email, User.role == "user").first()
+
 def get_user_by_id(db: Session, id: int) -> Optional[User]:
     return db.query(User).filter(User.id == id).first()
+
 
 
 def create_new_user(
@@ -114,7 +118,9 @@ def admin_get_all_users(
     db: Session,
     page: int = 1,
     limit: int = 25,
-    only_active: bool = False
+    only_active: bool = False,
+    plan: str | None = None,
+    status: str | None = None
 ):
     offset = (page - 1) * limit
 
@@ -150,12 +156,20 @@ def admin_get_all_users(
 
     query = db.query(User).filter(User.role == "user")
 
-    if only_active:
+    if only_active or status == "active":
         query = query.filter(User.is_active == True)
+    elif status == "inactive":
+        query = query.filter(User.is_active == False)
+
+    if plan:
+        from models.plan import Plan
+        query = query.join(User.current_plan).filter(Plan.name == plan)
+
+    total_matching = query.count()
 
     users = (
         query
-        .order_by(User.created_at.desc())
+        .order_by(User.created_at.desc(), User.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -171,7 +185,7 @@ def admin_get_all_users(
         },
         "page": page,
         "limit": limit,
-        "has_next": offset + limit < total_users,
+        "has_next": offset + limit < total_matching,
         "items": users
     }
 

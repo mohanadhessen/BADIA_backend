@@ -25,13 +25,22 @@ from models.request import Request as DBRequest
 from models.review import Review
 
 
+
+
 @router.get("/me")
 @limiter.limit("60/minute")
 def get_user_profile(
     request: Request,
     response: Response,  
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    minimal: bool = False
 ):
+    
+    if minimal:
+        return {
+            "status": "logged_in"
+        }
+
     data = {
         "status": "success",
         "user_info": {

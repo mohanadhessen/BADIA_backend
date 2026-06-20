@@ -9,8 +9,10 @@ from crud.review import (
     admin_get_all_review,
     delete_review,
     admin_set_review_publish_status,
+    get_reviews_by_user_email,
 )
 from schemas.admin import ReviewPublishUpdate
+from schemas.review import AdminReviewResponse
 
 
 router = APIRouter(
@@ -29,7 +31,7 @@ def get_all_reviews(
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
-    etag = compute_db_etag(db, Review, page=page, limit=limit, order_by=Review.created_at.desc())
+    etag = compute_db_etag(db, Review, page=page, limit=limit, order_by=(Review.created_at.desc(), Review.id.desc()))
     check_etag(request, etag)
     
     data = admin_get_all_review(
@@ -39,6 +41,22 @@ def get_all_reviews(
     )
     response.headers["ETag"] = etag
     return data
+
+
+@router.get("/reviews/by-email", response_model=list[AdminReviewResponse])
+@limiter.limit("60/minute")
+def get_reviews_by_email_endpoint(
+    request: Request,
+    email: str,
+    db: Session = Depends(get_db)
+):
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email query parameter is required"
+        )
+    reviews = get_reviews_by_user_email(db, email)
+    return reviews
 
 
 @router.delete("/reviews/{review_id}")

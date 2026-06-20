@@ -7,9 +7,10 @@ from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from api.etag import compute_etag, check_etag, compute_db_etag
 from models.request import Request as DBRequest
-from crud.request import get_request_by_id, delete_request, admin_get_all_requests, update_request_status
+from crud.request import get_request_by_id, delete_request, admin_get_all_requests, update_request_status, get_requests_by_user_email
 from email_service import send_request_status_email
 from schemas.admin import StatusUpdate
+from schemas.request import AdminRequestResponse
 from models.UserFile import UserFile
 from r2_client import s3
 from config import settings
@@ -31,7 +32,7 @@ def get_all_requests(
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
-    etag = compute_db_etag(db, DBRequest, page=page, limit=limit, order_by=DBRequest.created_at.desc())
+    etag = compute_db_etag(db, DBRequest, page=page, limit=limit, order_by=(DBRequest.created_at.desc(), DBRequest.id.desc()))
     check_etag(request, etag)
 
     data = admin_get_all_requests(
@@ -41,6 +42,22 @@ def get_all_requests(
     )
     response.headers["ETag"] = etag
     return data
+
+
+@router.get("/requests/by-email", response_model=list[AdminRequestResponse])
+@limiter.limit("60/minute")
+def get_requests_by_email_endpoint(
+    request: Request,
+    email: str,
+    db: Session = Depends(get_db)
+):
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Email query parameter is required"
+        )
+    requests = get_requests_by_user_email(db, email)
+    return requests
 
 @router.patch("/requests/{request_id}/status")
 @limiter.limit("30/minute")

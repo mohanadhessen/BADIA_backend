@@ -12,6 +12,18 @@ def get_reviews_by_user(db: Session, user_id: int) -> List[Review]:
     return db.query(Review).filter(Review.user_id == user_id).all()
 
 
+def get_reviews_by_user_email(db: Session, email: str) -> List[Review]:
+    from models.user import User
+    return (
+        db.query(Review)
+        .join(User, Review.user_id == User.id)
+        .filter(User.email == email)
+        .options(joinedload(Review.user))
+        .order_by(Review.created_at.desc())
+        .all()
+    )
+
+
 def get_all_reviews(
     db: Session,
     published_only: bool = True
@@ -75,7 +87,8 @@ def delete_review(db: Session, review_id: int) -> bool:
 def admin_get_all_review(
     db: Session,
     page: int = 1,
-    limit: int = 25
+    limit: int = 25,
+    pending_only: bool = False
 ):
     offset = (page - 1) * limit
 
@@ -90,13 +103,14 @@ def admin_get_all_review(
     .filter(Review.is_published == False)
     .scalar() or 0
         )
-    reviews = (
-        db.query(Review)
-        .options(
-            joinedload(Review.user)  
+    
+    query = db.query(Review).options(joinedload(Review.user))
+    if pending_only:
+        query = query.filter(Review.is_published == False)
 
-        )
-        .order_by(Review.created_at.desc())
+    reviews = (
+        query
+        .order_by(Review.created_at.desc(), Review.id.desc())
         .offset(offset)
         .limit(limit)
         .all()

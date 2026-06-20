@@ -2,7 +2,7 @@ from pwdlib import PasswordHash
 import jwt
 from datetime import datetime, timedelta, timezone
 from config import settings
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status , Response
 import hashlib
 
 
@@ -89,4 +89,58 @@ def verify_refresh_token(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or malformed refresh token.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+
+
+
+
+
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str, role: str = "") -> None:
+    cookie_domain = settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None
+    common = dict(
+        domain=cookie_domain,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        httponly=True,
+    )
+    response.set_cookie(
+        key=settings.ACCESS_TOKEN_COOKIE_NAME,
+        value=access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        **common,
+    )
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token,
+        max_age=30 * 24 * 3600,   
+        **common,
+    )
+    
+    if role:
+        response.set_cookie(
+            key=settings.ROLE_COOKIE_NAME,
+            value=role,
+            max_age=30 * 24 * 3600,
+            domain=cookie_domain,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
+            httponly=False,  
+        )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    cookie_domain = settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None
+    for name in [
+        settings.ACCESS_TOKEN_COOKIE_NAME,
+        settings.REFRESH_TOKEN_COOKIE_NAME,
+        settings.ROLE_COOKIE_NAME,
+    ]:
+        response.delete_cookie(
+            key=name,
+            domain=cookie_domain,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
         )

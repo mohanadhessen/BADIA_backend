@@ -158,7 +158,10 @@ def compute_db_etag(
             query = query.filter(f)
             
     if order_by is not None:
-        query = query.order_by(order_by)
+        if isinstance(order_by, (list, tuple)):
+            query = query.order_by(*order_by)
+        else:
+            query = query.order_by(order_by)
         
     # Get total count for pagination context
     count_query = db.query(func.count(id_field or model.id))

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, field_validator
 
+from datetime import datetime
+from typing import Optional
+import re
 
 class UserRegister(BaseModel):
     first_name: str
@@ -11,6 +12,14 @@ class UserRegister(BaseModel):
     password: str
     phone: Optional[str] = None
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        if v is None:
+            return v
+        if not re.fullmatch(r"\+?[0-9\s\-]{7,20}", v):
+            raise ValueError("Invalid phone number")
+        return v  
 
 class LoginRequest(BaseModel):
     email: str
@@ -48,3 +57,23 @@ class UserUpdate(BaseModel):
 class UserPasswordReset(BaseModel):
     current_password: str
     new_password: str
+
+
+class AdminUserSearchResponse(BaseModel):
+    id: int
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: str
+    email: str
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+    role: str
+    auth_provider: str
+    is_email_verified: bool
+    is_active: bool
+    current_plan_id: Optional[int] = None
+    subscription_end_date: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

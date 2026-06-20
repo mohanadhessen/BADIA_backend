@@ -9,12 +9,14 @@ from models.plan import Plan
 from crud.user import (
     admin_get_all_users,
     get_user_by_email,
+    admin_get_user_by_email,
     get_users_plans_distribution,
     admin_update_user_data,
     get_user_by_id,
     delete_user
 )
 from schemas.admin import AdminUserUpdateSchema
+from schemas.user import AdminUserSearchResponse
 
 
 router = APIRouter(
@@ -32,19 +34,30 @@ def get_all_users(
     page: int = 1,
     limit: int = 25,
     only_active: bool = False,
+    plan: str | None = None,
+    status: str | None = None,
     db: Session = Depends(get_db)
 ):
     filters = [User.role == "user"]
-    if only_active:
+    if only_active or status == "active":
         filters.append(User.is_active == True)
-    etag = compute_db_etag(db, User, page=page, limit=limit, filters=filters, order_by=User.created_at.desc())
+    elif status == "inactive":
+        filters.append(User.is_active == False)
+        
+    if plan:
+        from models.plan import Plan
+        filters.append(User.current_plan.has(Plan.name == plan))
+        
+    etag = compute_db_etag(db, User, page=page, limit=limit, filters=filters, order_by=(User.created_at.desc(), User.id.desc()))
     check_etag(request, etag)
 
     data = admin_get_all_users(
         db=db,
         page=page,
         limit=limit,
-        only_active=only_active
+        only_active=only_active,
+        plan=plan,
+        status=status
     )
     response.headers["ETag"] = etag
     return data
@@ -150,6 +163,27 @@ def get_user_endpoint(
         )
 
     response.headers["ETag"] = etag
+    return user
+
+
+@router.get("/users/by-email", response_model=AdminUserSearchResponse)
+@limiter.limit("60/minute")
+def get_user_by_email_endpoint(
+    request: Request,
+    email: str,
+    db: Session = Depends(get_db)
+):
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email query parameter is required"
+        )
+    user = admin_get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
     return user
 
 
