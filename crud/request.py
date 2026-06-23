@@ -4,6 +4,7 @@ from sqlalchemy import func
 from models.request import Request
 from sqlalchemy.exc import IntegrityError
 import uuid
+from crud.dashboard_metrics import refresh_request_metrics
 
 
 
@@ -29,6 +30,7 @@ def create_request(db: Session, user_id: int, service_type: str) -> Request:
         db.rollback()
         raise HTTPException(409, "You already have a request for this service")
     db.refresh(request)
+    refresh_request_metrics(db)
     return request
 
 
@@ -71,6 +73,7 @@ def update_request_status(
     request.status = new_status
     db.commit()
     db.refresh(request)
+    refresh_request_metrics(db)
     return request
 
 
@@ -112,6 +115,7 @@ def delete_request(
 
     db.delete(request)
     db.commit()
+    refresh_request_metrics(db)
 
     return {
         "request_id": request_id,
@@ -121,25 +125,23 @@ def delete_request(
 
 
 def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
-
     offset = (page - 1) * limit
 
-    total_requests = db.query(func.count(Request.id)).scalar() or 0
-    pending_requests = db.query(func.count(Request.id)).filter(Request.status == "pending").scalar() or 0
-    approved_requests = db.query(func.count(Request.id)).filter(Request.status == "approved").scalar() or 0
-    rejected_requests = db.query(func.count(Request.id)).filter(Request.status == "rejected").scalar() or 0
-
-    requests = (
-        db.query(Request)
+    query = db.query(Request)
+    requests_plus_one = (
+        query
         .options(
             joinedload(Request.user),
             joinedload(Request.files)
         )
         .order_by(Request.created_at.desc(), Request.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
         .all()
     )
+
+    has_next = len(requests_plus_one) > limit
+    requests = requests_plus_one[:limit]
 
     items = [
         {
@@ -176,14 +178,8 @@ def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
     ]
 
     return {
-        "metrics": {
-            "total_requests": total_requests,
-            "pending_requests": pending_requests,
-            "approved_requests": approved_requests,
-            "rejected_requests": rejected_requests
-        },
         "page": page,
         "limit": limit,
-        "has_next": offset + limit < total_requests,
+        "has_next": has_next,
         "items": items
     }

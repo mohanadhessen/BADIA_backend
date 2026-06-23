@@ -43,15 +43,17 @@ DONE
     leftover debug endpoint or init-confirmation message
 [x] Alembic migrations added & verified (MySQL/TiDB compatible with dynamic constraint handling)
 
+[x] Admin dashboard: get_storage_usage_safe() does a full uncached R2
+
+[x] No pytest + httpx test suite
+
+[x] Admin dashboard: compute_global_db_etag() runs 14 sequential queries
+    (2 x 7 models) for the ETag precheck - collapse into one query
 OPEN
 ----
-[ ] No pytest + httpx test suite
 [ ] Still sync SQLAlchemy + pymysql, no real async DB layer (a couple of
     isolated async def routes only)
-[ ] Admin dashboard: get_storage_usage_safe() does a full uncached R2
     bucket scan on every load - needs caching (5-15 min TTL)
-[ ] Admin dashboard: compute_global_db_etag() runs 14 sequential queries
-    (2 x 7 models) for the ETag precheck - collapse into one query
 [ ] Admin dashboard: admin_get_all_* crud functions each do separate
     count + select queries - combine via window function (lower priority,
     real fix is async + concurrent queries once the async migration lands)
@@ -78,8 +80,6 @@ DONE
     length at 100 chars. Confirmed actually wired into both upload call
     sites (file.filename reassigned before use), not just defined.
 
-OPEN
-----
 [x] access_token and refresh_token still stored in localStorage. Lower
     urgency now that the XSS holes are closed, but still worth moving to
     httpOnly cookies eventually (needs SameSite=None; Secure + CSRF
@@ -90,3 +90,6 @@ OPEN
 [x][fixed on backend by sanitizing the names] File upload filenames not sanitized/restricted at upload time - lower
     priority now that rendering is fixed, but still worth normalizing as
     defense in depth
+
+OPEN
+----

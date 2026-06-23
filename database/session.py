@@ -2,7 +2,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config import settings
 
-connect_args = {}
+connect_args = {
+    "init_command": "SET time_zone='+00:00'"
+}
 if settings.ENV == "production":
     connect_args["ssl"] = {"ssl_mode": "VERIFY_IDENTITY"}
 

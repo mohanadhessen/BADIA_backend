@@ -1,27 +1,17 @@
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
-import sentry_sdk
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import check_etag, compute_global_db_etag
-from r2_client import s3
-from config import settings
-
-from models.user import User
-from models.plan import Plan
-from models.review import Review
-from models.request import Request as DBRequest
-from models.payment import Payment
-from models.email_metric import EmailMetric
-from models.user_file import UserFile
-
 from crud.user import admin_get_all_users, get_users_plans_distribution
 from crud.review import admin_get_all_review
 from crud.request import admin_get_all_requests
 from crud.payment import admin_get_all_payments
 from crud.plan import get_all_plans
-from crud.email_metric import get_emails_metric
+from crud.metrics import get_emails_metric, get_files_metric
+from crud.dashboard_metrics import get_dashboard_metrics
+
+import time
 
 router = APIRouter(
     prefix="",
@@ -29,38 +19,6 @@ router = APIRouter(
     dependencies=[Depends(require_admin)]
 )
 
-def get_storage_usage_safe():
-    try:
-        paginator = s3.get_paginator("list_objects_v2")
-        total_bytes = 0
-        total_files = 0
-        for page in paginator.paginate(Bucket=settings.R2_BUCKET):
-            for obj in page.get("Contents", []):
-                total_bytes += obj["Size"]
-                total_files += 1
-        total_gb = total_bytes / (1024 ** 3)
-        FREE_TIER_GB = 10
-        return {
-            "used_bytes": total_bytes,
-            "used_kb": round(total_bytes / 1024, 2),
-            "used_mb": round(total_bytes / (1024 ** 2), 4),
-            "used_gb": round(total_bytes / (1024 ** 3), 6),
-            "remaining_gb": round(max(FREE_TIER_GB - total_gb, 0), 6),
-            "usage_percent": round((total_gb / FREE_TIER_GB) * 100, 6),
-            "total_files": total_files,
-        }
-    except Exception as e:
-        sentry_sdk.capture_exception(e)
-        return {
-            "error": f"Failed to retrieve storage usage: {str(e)}",
-            "used_bytes": 0,
-            "used_kb": 0,
-            "used_mb": 0,
-            "used_gb": 0,
-            "remaining_gb": 10,
-            "usage_percent": 0,
-            "total_files": 0,
-        }
 
 @router.get("/dashboard")
 @limiter.limit("30/minute")
@@ -79,40 +37,98 @@ def get_dashboard_data(
     payments_status: str | None = None,
     db: Session = Depends(get_db)
 ):
-    # 1. Fast, lightweight ETag pre-check (checks only total counts and max updated_at for all models)
-    etag = compute_global_db_etag(db, [User, Plan, Review, DBRequest, Payment, EmailMetric, UserFile])
-    check_etag(request, etag)
+    total_start = time.perf_counter()
 
-    # 2. Fetch full data only if ETag did not match (Client doesn't have the current version)
+    start = time.perf_counter()
+    metrics_row = get_dashboard_metrics(db)
+    print(f"metrics_row: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    metrics = {}
+    if metrics_row:
+        metrics = {
+            "users": {
+                "total_users": metrics_row.total_users,
+                "active_users": metrics_row.active_users,
+                "inactive_users": metrics_row.inactive_users,
+                "verified_users": metrics_row.verified_users,
+                "unverified_users": metrics_row.unverified_users,
+            },
+            "payments": {
+                "total_payments": metrics_row.total_payments,
+                "paid_payments": metrics_row.paid_payments,
+                "rejected_payments": metrics_row.rejected_payments,
+                "canceled_payments": metrics_row.canceled_payments,
+                "monthly_payments": metrics_row.monthly_payments,
+                "yearly_payments": metrics_row.yearly_payments,
+                "total_revenue": float(metrics_row.total_revenue),
+            },
+            "reviews": {
+                "total_reviews": metrics_row.total_reviews,
+                "published_reviews": metrics_row.published_reviews,
+                "pending_reviews": metrics_row.pending_reviews,
+            },
+            "requests": {
+                "total_requests": metrics_row.total_requests,
+                "pending_requests": metrics_row.pending_requests,
+                "approved_requests": metrics_row.approved_requests,
+                "rejected_requests": metrics_row.rejected_requests,
+            },
+            "updated_at": metrics_row.updated_at,
+        }
+
+    start = time.perf_counter()
     users_data = admin_get_all_users(
         db=db,
         page=users_page,
         limit=users_limit,
         only_active=users_only_active
     )
+    print(f"users_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
     plans_distribution = get_users_plans_distribution(db=db)
+    print(f"plans_distribution: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
     reviews_data = admin_get_all_review(
         db=db,
         page=reviews_page,
         limit=reviews_limit,
         pending_only=True
     )
+    print(f"reviews_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
     requests_data = admin_get_all_requests(
         db=db,
         page=requests_page,
         limit=requests_limit
     )
+    print(f"requests_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
     payments_data = admin_get_all_payments(
         db=db,
         page=payments_page,
         limit=payments_limit,
         status=payments_status
     )
-    storage_data = get_storage_usage_safe()
-    emails_data = get_emails_metric(db=db)
-    plans_list = get_all_plans(db=db)
+    print(f"payments_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
+    storage_data = get_files_metric(db)
+    print(f"storage_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
+    emails_data = get_emails_metric(db)
+    print(f"emails_data: {(time.perf_counter() - start) * 1000:.2f} ms")
+
+    start = time.perf_counter()
+    plans_list = get_all_plans(db)
+    print(f"plans_list: {(time.perf_counter() - start) * 1000:.2f} ms")
 
     dashboard_data = {
+        "metrics": metrics,
         "users": users_data,
         "plans_distribution": plans_distribution,
         "reviews": reviews_data,
@@ -123,5 +139,6 @@ def get_dashboard_data(
         "plans": plans_list,
     }
 
-    response.headers["ETag"] = etag
+    print(f"TOTAL ENDPOINT: {(time.perf_counter() - total_start) * 1000:.2f} ms")
+
     return dashboard_data

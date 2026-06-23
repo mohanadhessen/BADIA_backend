@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks, Response
+from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import sentry_sdk
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag, compute_db_etag
 from models.request import Request as DBRequest
 from crud.request import get_request_by_id, delete_request, admin_get_all_requests, update_request_status, get_requests_by_user_email
 from email_service import send_request_status_email
@@ -27,20 +26,15 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_requests(
     request: Request,
-    response: Response,
     page: int = 1,
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
-    etag = compute_db_etag(db, DBRequest, page=page, limit=limit, order_by=(DBRequest.created_at.desc(), DBRequest.id.desc()))
-    check_etag(request, etag)
-
     data = admin_get_all_requests(
         db=db,
         page=page,
         limit=limit
     )
-    response.headers["ETag"] = etag
     return data
 
 

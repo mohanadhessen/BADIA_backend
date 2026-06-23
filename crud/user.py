@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models.plan import Plan
 from security import hash_password
+from crud.dashboard_metrics import refresh_user_metrics
 
 
 
@@ -54,6 +55,7 @@ def create_new_user(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    refresh_user_metrics(db)
     return new_user
 
 
@@ -75,6 +77,7 @@ def update_user_data(db: Session, email: str, update_data: dict):
 
     db.commit()
     db.refresh(db_user)
+    refresh_user_metrics(db)
     return db_user
 
 
@@ -86,6 +89,7 @@ def delete_user(db: Session, email: str) -> bool:
     db_user.is_active = False
     db.commit()
     db.refresh(db_user)
+    refresh_user_metrics(db)
     return True
 
 
@@ -110,6 +114,7 @@ def admin_update_user_data(db: Session, email: str, update_data: dict) -> User:
 
         db.commit()
         db.refresh(user)
+        refresh_user_metrics(db)
 
     return user
 
@@ -124,36 +129,6 @@ def admin_get_all_users(
 ):
     offset = (page - 1) * limit
 
-    total_users = db.query(func.count(User.id)).filter(User.role == "user").scalar() or 0
-
-    active_users = (
-        db.query(func.count(User.id))
-        .filter(User.role == "user")
-        .filter(User.is_active == True)
-        .scalar() or 0
-    )
-
-    inactive_users = (
-        db.query(func.count(User.id))
-        .filter(User.role == "user")
-        .filter(User.is_active == False)
-        .scalar() or 0
-    )
-
-    verified_users = (
-        db.query(func.count(User.id))
-        .filter(User.role == "user")
-        .filter(User.is_email_verified == True)
-        .scalar() or 0
-    )
-
-    unverified_users = (
-        db.query(func.count(User.id))
-        .filter(User.role == "user")
-        .filter(User.is_email_verified == False)
-        .scalar() or 0
-    )
-
     query = db.query(User).filter(User.role == "user")
 
     if only_active or status == "active":
@@ -165,33 +140,37 @@ def admin_get_all_users(
         from models.plan import Plan
         query = query.join(User.current_plan).filter(Plan.name == plan)
 
-    total_matching = query.count()
-
-    users = (
+    rows = (
         query
         .order_by(User.created_at.desc(), User.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)   # fetch one extra to detect next page
         .all()
     )
 
+    has_next = len(rows) > limit
+    users = rows[:limit]
+
     return {
-        "metrics": {
-            "total_users": total_users,
-            "active_users": active_users,
-            "inactive_users": inactive_users,
-            "verified_users": verified_users,
-            "unverified_users": unverified_users
-        },
         "page": page,
         "limit": limit,
-        "has_next": offset + limit < total_matching,
+        "has_next": has_next,
         "items": users
     }
 
 
 
+
+import time
+
+_plans_distribution_cache = {}
+_PLANS_CACHE_TTL = 300  # 5 minutes
+
 def get_users_plans_distribution(db: Session):
+    now = time.monotonic()
+    if "data" in _plans_distribution_cache and (now - _plans_distribution_cache["time"]) < _PLANS_CACHE_TTL:
+        return _plans_distribution_cache["data"]
+
     results = (
         db.query(
             func.coalesce(Plan.name, "No Plan").label("plan"),
@@ -204,10 +183,14 @@ def get_users_plans_distribution(db: Session):
         .all()
     )
 
-    return [
+    data = [
         {
             "plan": row.plan,
             "count": row.count
         }
         for row in results
     ]
+
+    _plans_distribution_cache["data"] = data
+    _plans_distribution_cache["time"] = now
+    return data

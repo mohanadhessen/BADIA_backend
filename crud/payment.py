@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session , joinedload
 from sqlalchemy import func
 from schemas.payment import PaymentBase , PaymentUpdate
 from datetime import datetime
+from crud.dashboard_metrics import refresh_payment_metrics
 
 
 
@@ -64,6 +65,7 @@ def create_payment(db: Session, data: PaymentBase, billing_cycle: str):
 
     db.commit()
     db.refresh(payment)
+    refresh_payment_metrics(db)
 
     return payment
 
@@ -105,6 +107,7 @@ def update_payment(
 
     db.commit()
     db.refresh(payment)
+    refresh_payment_metrics(db)
 
     return payment
 
@@ -118,64 +121,6 @@ def admin_get_all_payments(
 ):
     offset = (page - 1) * limit
 
-    now = datetime.utcnow()
-    month_start = datetime(now.year, now.month, 1)
-
-    total_payments = db.query(func.count(Payment.id)).scalar() or 0
-
-    paid_payments = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.status == "paid")
-        .scalar() or 0
-    )
-
-    rejected_payments = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.status == "rejected")
-        .scalar() or 0
-    )
-
-    canceled_payments = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.status == "canceled")
-        .scalar() or 0
-    )
-
-    monthly_payments = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.billing_cycle == "monthly")
-        .scalar() or 0
-    )
-
-    yearly_payments = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.billing_cycle == "yearly")
-        .scalar() or 0
-    )
-
-    payments_this_month = (
-        db.query(func.count(Payment.id))
-        .filter(Payment.created_at >= month_start)
-        .scalar() or 0
-    )
-
-    total_revenue = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.status.in_(["paid", "canceled"]))
-        .scalar()
-    )
-
-    revenue_this_month = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(
-            Payment.status.in_(["paid", "canceled"]),
-            Payment.created_at >= month_start
-        )
-        .scalar()
-    )
-
-
-
     query = (
         db.query(Payment)
         .options(
@@ -187,33 +132,20 @@ def admin_get_all_payments(
     if status:
         query = query.filter(Payment.status == status)
 
-    filtered_count = (
-        query.with_entities(func.count(Payment.id))
-        .scalar() or 0
-    )
-
-    payments = (
+    payments_plus_one = (
         query
         .order_by(Payment.created_at.desc(), Payment.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
         .all()
     )
 
+    has_next = len(payments_plus_one) > limit
+    payments = payments_plus_one[:limit]
+
     return {
-        "metrics": {
-            "total_payments": total_payments,
-            "paid_payments": paid_payments,
-            "rejected_payments": rejected_payments,
-            "canceled_payments": canceled_payments,
-            "monthly_payments": monthly_payments,
-            "yearly_payments": yearly_payments,
-            "payments_this_month": payments_this_month,
-            "total_revenue": float(total_revenue),
-            "revenue_this_month": float(revenue_this_month),
-        },
         "page": page,
         "limit": limit,
-        "has_next": offset + limit < filtered_count,
+        "has_next": has_next,
         "items": payments
     }

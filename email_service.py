@@ -3,7 +3,7 @@ import resend
 from config import settings
 from datetime import datetime,timezone
 from database.session import SessionLocal
-from crud.email_metric import log_email_sent
+from crud.metrics import log_email_sent
 import html
 
 

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     CSRF_COOKIE_NAME: str = "csrf_token"
     ROLE_COOKIE_NAME: str = "badia_role"
 
-
+    REDIS_URL : str
 
 
 

@@ -10,7 +10,7 @@ class FeasibilityRequest(BaseModel):
     funding_source: str
 
 
-class OperationalPartnership(BaseModel):
+class Partnership(BaseModel):
     pdf_files: List[str] = Field(
         ...,
         min_length=1,

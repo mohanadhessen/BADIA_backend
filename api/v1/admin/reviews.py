@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag, compute_db_etag
 from models.review import Review
 from crud.review import (
     admin_get_all_review,
@@ -26,20 +25,15 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_reviews(
     request: Request,
-    response: Response,
     page: int = 1,
     limit: int = 25,
     db: Session = Depends(get_db)
 ):
-    etag = compute_db_etag(db, Review, page=page, limit=limit, order_by=(Review.created_at.desc(), Review.id.desc()))
-    check_etag(request, etag)
-    
     data = admin_get_all_review(
         db=db,
         page=page,
         limit=limit
     )
-    response.headers["ETag"] = etag
     return data
 
 

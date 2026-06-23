@@ -8,12 +8,12 @@ class Review(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     stars = Column(Integer, nullable=False)
 
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     review_text = Column(Text, nullable=False)
 
-    is_published = Column(Boolean, server_default=text("0"))
+    is_published = Column(Boolean, server_default=text("0"), index=True)
 
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="reviews")

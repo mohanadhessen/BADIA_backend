@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends, Response, Request
+from fastapi import APIRouter, Depends, Request, Response
 from starlette.status import HTTP_304_NOT_MODIFIED
 from sqlalchemy.orm import Session
-from database.session import get_db 
-from crud.plan import  get_all_plans , get_plans_cache_metadata
+from database.session import get_db
+from crud.plan import get_all_plans
 from schemas.plan import PlanResponse
-import hashlib
 from api.rate_limiter import limiter
-from models.plan import Plan
-from api.etag import compute_db_etag, check_etag
+from cache.plans import bump_plans_version, get_plans_version
+from cache.etags import make_etag, check_etag
 
 
 router = APIRouter(tags=["Plans"])
@@ -20,12 +19,14 @@ def list_plans(
     response: Response,
     db: Session = Depends(get_db)
 ):
-    etag = compute_db_etag(db, Plan)
-    check_etag(request, etag)
-    
-    plans = get_all_plans(db)
-    
-    response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "no-cache"
+    version = get_plans_version()
+    if version == 0:
+        bump_plans_version()
+        version = 1
 
+    etag = make_etag(version)
+    if check_etag(request, response, etag):
+        return []
+
+    plans = get_all_plans(db)
     return plans

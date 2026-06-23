@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag, compute_db_etag, compute_global_db_etag
 from models.user import User
 from models.plan import Plan
 from crud.user import (
@@ -30,7 +29,6 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_users(
     request: Request,
-    response: Response,
     page: int = 1,
     limit: int = 25,
     only_active: bool = False,
@@ -48,9 +46,6 @@ def get_all_users(
         from models.plan import Plan
         filters.append(User.current_plan.has(Plan.name == plan))
         
-    etag = compute_db_etag(db, User, page=page, limit=limit, filters=filters, order_by=(User.created_at.desc(), User.id.desc()))
-    check_etag(request, etag)
-
     data = admin_get_all_users(
         db=db,
         page=page,
@@ -59,17 +54,13 @@ def get_all_users(
         plan=plan,
         status=status
     )
-    response.headers["ETag"] = etag
     return data
 
 
 @router.get("/users/plan-distribution")
 @limiter.limit("60/minute")
-def get_users_plan_distribution(request: Request, response: Response, db: Session = Depends(get_db)):
-    etag = compute_global_db_etag(db, [User, Plan])
-    check_etag(request, etag)
+def get_users_plan_distribution(request: Request, db: Session = Depends(get_db)):
     data = get_users_plans_distribution(db)
-    response.headers["ETag"] = etag
     return data
 
 
@@ -131,7 +122,6 @@ def delete_user_endpoint(
 @limiter.limit("60/minute")
 def get_user_endpoint(
     request: Request,
-    response: Response,
     user_id: int | None = None,
     email: str | None = None,
     db: Session = Depends(get_db)
@@ -148,9 +138,6 @@ def get_user_endpoint(
     else:
         filters.append(User.email == email)
 
-    etag = compute_db_etag(db, User, filters=filters)
-    check_etag(request, etag)
-
     if user_id is not None:
         user = get_user_by_id(db, user_id)
     else:
@@ -162,7 +149,6 @@ def get_user_endpoint(
             detail="User not found"
         )
 
-    response.headers["ETag"] = etag
     return user
 
 

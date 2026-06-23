@@ -8,22 +8,24 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
-    plan_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)
+    plan_id = Column(Integer, nullable=False, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
     billing_cycle = Column(
         Enum("monthly", "yearly", name="billing_cycle"),
-        nullable=False
+        nullable=False,
+        index=True
     )
     status = Column(
     Enum("paid", "rejected", "canceled", name="payment_status"),
-    nullable=False
+    nullable=False,
+    index=True
 )
 
     start_date = Column(TIMESTAMP, nullable=False)
     end_date = Column(TIMESTAMP, nullable=False)
 
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", primaryjoin="Payment.user_id == User.id", foreign_keys=[user_id], back_populates="payments")

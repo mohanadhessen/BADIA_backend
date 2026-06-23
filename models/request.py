@@ -26,7 +26,7 @@ class Request(Base):
 
     service_type = Column(
         Enum(
-            "operational_partnership",
+            "partnership",
             "feasibility_study",
             name="service_type"
         ),

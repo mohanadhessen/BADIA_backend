@@ -2,6 +2,7 @@ from models.review import Review
 from typing import Optional, List
 from sqlalchemy.orm import Session , joinedload
 from sqlalchemy import func
+from crud.dashboard_metrics import refresh_review_metrics
 
 
 def get_review_by_id(db: Session, review_id: int) -> Optional[Review]:
@@ -53,6 +54,7 @@ def create_review(
     db.add(new_review)
     db.commit()
     db.refresh(new_review)
+    refresh_review_metrics(db)
     return new_review
 
 
@@ -68,6 +70,7 @@ def update_review(db: Session, review_id: int, update_data: dict) -> Optional[Re
 
     db.commit()
     db.refresh(review)
+    refresh_review_metrics(db)
     return review
 
 
@@ -80,6 +83,7 @@ def delete_review(db: Session, review_id: int) -> bool:
 
     db.delete(review)
     db.commit()
+    refresh_review_metrics(db)
     return True
 
 
@@ -92,40 +96,27 @@ def admin_get_all_review(
 ):
     offset = (page - 1) * limit
 
-    total_reviews = db.query(func.count(Review.id)).scalar() or 0
-    published_reviews = (
-    db.query(func.count(Review.id))
-    .filter(Review.is_published == True)
-    .scalar() or 0
-    )
-    pending_reviews = (
-    db.query(func.count(Review.id))
-    .filter(Review.is_published == False)
-    .scalar() or 0
-        )
-    
     query = db.query(Review).options(joinedload(Review.user))
     if pending_only:
         query = query.filter(Review.is_published == False)
 
-    reviews = (
+    reviews_plus_one = (
         query
         .order_by(Review.created_at.desc(), Review.id.desc())
         .offset(offset)
-        .limit(limit)
+        .limit(limit + 1)
         .all()
     )
 
+    has_next = len(reviews_plus_one) > limit
+    reviews = reviews_plus_one[:limit]
+
     return {
-        "metrics": {
-            "total_reviews": total_reviews,
-            "published_reviews": published_reviews,
-            "pending_reviews": pending_reviews
-        },
         "page": page,
         "limit": limit,
-        "has_next": offset + limit < total_reviews,
-        "items": reviews}
+        "has_next": has_next,
+        "items": reviews
+    }
 
 
 
@@ -144,5 +135,6 @@ def admin_set_review_publish_status(
 
     db.commit()
     db.refresh(review)
+    refresh_review_metrics(db)
 
     return review

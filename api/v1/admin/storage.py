@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
-from api.etag import compute_etag, check_etag, compute_db_etag
 from r2_client import s3
 from config import settings
-from crud.email_metric import get_emails_metric
+from crud.metrics import get_emails_metric
 from models.user_file import UserFile
 from models.email_metric import EmailMetric
 
@@ -37,10 +36,7 @@ def get_bucket_storage_usage(s3, bucket_name):
 
 @router.get("/storage/usage")
 @limiter.limit("10/minute")
-def get_storage_usage(request: Request, response: Response, db: Session = Depends(get_db)):
-    etag = compute_db_etag(db, UserFile)
-    check_etag(request, etag)
-
+def get_storage_usage(request: Request, db: Session = Depends(get_db)):
     paginator = s3.get_paginator("list_objects_v2")
 
     total_bytes = 0
@@ -65,15 +61,10 @@ def get_storage_usage(request: Request, response: Response, db: Session = Depend
         "total_files": total_files,
     }
     
-    response.headers["ETag"] = etag
     return data
 
 @router.get("/emails/sent-this-month")
 @limiter.limit("10/minute")
-def get_email_count(request: Request, response: Response, db: Session = Depends(get_db)):
-    etag = compute_db_etag(db, EmailMetric)
-    check_etag(request, etag)
-    
+def get_email_count(request: Request, db: Session = Depends(get_db)):
     data = get_emails_metric(db)
-    response.headers["ETag"] = etag
     return data
