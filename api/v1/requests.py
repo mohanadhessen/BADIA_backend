@@ -30,6 +30,7 @@ from schemas.FileResponse import FileResponse
 from api.rate_limiter import limiter
 from cache.requests import bump_user_requests_version, get_user_requests_version, bump_global_requests_version
 from cache.etags import make_etag, check_etag
+from crud.dashboard_metrics import refresh_requests_metrics
 
 
 R2_BUCKET = settings.R2_BUCKET
@@ -227,6 +228,7 @@ def submit_partnership(
         sentry_sdk.capture_exception(e)
         raise HTTPException(500, f"Upload failed: {str(e)}")
 
+    refresh_requests_metrics(db)
     return {
         "message": "Files uploaded successfully",
         "request_id": request.id,
@@ -330,6 +332,7 @@ def submit_feasibility_study(
         file_id
     )
 
+    refresh_requests_metrics(db)
     return {
         "status": "success",
         "message": "Feasibility request submitted successfully",
@@ -373,6 +376,7 @@ async def update_partnership_file(
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+    refresh_requests_metrics(db)
     return updated
 
 
@@ -408,6 +412,7 @@ async def update_feasibility_file(
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+    refresh_requests_metrics(db)
     return updated
 
 
@@ -445,6 +450,7 @@ def delete_my_request(
         bucket=R2_BUCKET
     )
 
+    refresh_requests_metrics(db)
     return {
         "status": "success",
         "message": "Request and associated storage objects deleted successfully",

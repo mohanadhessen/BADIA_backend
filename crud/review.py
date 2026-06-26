@@ -5,6 +5,8 @@ from sqlalchemy import func
 from crud.dashboard_metrics import refresh_review_metrics
 
 
+from crud.dashboard_metrics import refresh_review_metrics, get_dashboard_metrics
+
 def get_review_by_id(db: Session, review_id: int) -> Optional[Review]:
     return db.query(Review).filter(Review.id == review_id).first()
 
@@ -92,17 +94,43 @@ def admin_get_all_review(
     db: Session,
     page: int = 1,
     limit: int = 25,
-    pending_only: bool = False
+    pending_only: bool = False,
+    q: str | None = None,
+    status: str | None = None,
+    rating: int | None = None,
+    sort: str = "newest"
 ):
+    from sqlalchemy import or_
+    from models.user import User
     offset = (page - 1) * limit
 
-    query = db.query(Review).options(joinedload(Review.user))
-    if pending_only:
+    query = db.query(Review).join(User, Review.user_id == User.id).options(joinedload(Review.user))
+    if pending_only or status == "pending":
         query = query.filter(Review.is_published == False)
+    elif status == "accepted":
+        query = query.filter(Review.is_published == True)
+        
+    if rating:
+        query = query.filter(Review.stars == rating)
+        
+    if q:
+        search_filters = [
+            User.email.ilike(f"%{q}%"),
+            User.first_name.ilike(f"%{q}%"),
+            User.last_name.ilike(f"%{q}%"),
+            Review.review_text.ilike(f"%{q}%"),
+        ]
+        if q.isdigit():
+            search_filters.append(Review.id == int(q))
+        query = query.filter(or_(*search_filters))
+        
+    if sort == "oldest":
+        query = query.order_by(Review.created_at.asc())
+    else:
+        query = query.order_by(Review.created_at.desc())
 
     reviews_plus_one = (
         query
-        .order_by(Review.created_at.desc(), Review.id.desc())
         .offset(offset)
         .limit(limit + 1)
         .all()
@@ -111,7 +139,14 @@ def admin_get_all_review(
     has_next = len(reviews_plus_one) > limit
     reviews = reviews_plus_one[:limit]
 
+    metrics_row = get_dashboard_metrics(db)
+
     return {
+        "metrics": {
+            "total_reviews": metrics_row.get("total_reviews", 0) if metrics_row else 0,
+            "published_reviews": metrics_row.get("published_reviews", 0) if metrics_row else 0,
+            "pending_reviews": metrics_row.get("pending_reviews", 0) if metrics_row else 0
+        },
         "page": page,
         "limit": limit,
         "has_next": has_next,

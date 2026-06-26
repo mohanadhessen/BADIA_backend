@@ -4,9 +4,8 @@ from sqlalchemy import func
 from models.request import Request
 from sqlalchemy.exc import IntegrityError
 import uuid
-from crud.dashboard_metrics import refresh_request_metrics
-
-
+from crud.dashboard_metrics import refresh_requests_metrics
+from crud.dashboard_metrics import refresh_requests_metrics, get_dashboard_metrics
 
 def get_existing_request(db: Session, user_id: int, service_type: str) -> Request | None:
     return db.query(Request).filter(
@@ -30,7 +29,7 @@ def create_request(db: Session, user_id: int, service_type: str) -> Request:
         db.rollback()
         raise HTTPException(409, "You already have a request for this service")
     db.refresh(request)
-    refresh_request_metrics(db)
+    refresh_requests_metrics(db)
     return request
 
 
@@ -73,7 +72,7 @@ def update_request_status(
     request.status = new_status
     db.commit()
     db.refresh(request)
-    refresh_request_metrics(db)
+    refresh_requests_metrics(db)
     return request
 
 
@@ -115,7 +114,7 @@ def delete_request(
 
     db.delete(request)
     db.commit()
-    refresh_request_metrics(db)
+    refresh_requests_metrics(db)
 
     return {
         "request_id": request_id,
@@ -124,17 +123,53 @@ def delete_request(
 
 
 
-def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
+def admin_get_all_requests(
+    db: Session,
+    page: int = 1,
+    limit: int = 25,
+    q: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    plan: str | None = None,
+    sort: str = "newest",
+):
+    from sqlalchemy import or_
+    from models.user import User
+    from models.plan import Plan
     offset = (page - 1) * limit
 
-    query = db.query(Request)
+    query = db.query(Request).join(User, Request.user_id == User.id)
+    
+    if type:
+        query = query.filter(Request.service_type == type)
+    if status:
+        query = query.filter(Request.status == status)
+    if plan:
+        query = query.join(Plan, User.current_plan_id == Plan.id).filter(Plan.name == plan)
+        
+    if q:
+        search_filters = [
+            User.email.ilike(f"%{q}%"),
+            User.first_name.ilike(f"%{q}%"),
+            User.last_name.ilike(f"%{q}%"),
+            Request.service_type.ilike(f"%{q}%"),
+            Request.id.ilike(f"%{q}%"),
+        ]
+        # full name search simulation
+        search_filters.append((User.first_name + " " + User.last_name).ilike(f"%{q}%"))
+        query = query.filter(or_(*search_filters))
+        
+    if sort == "oldest":
+        query = query.order_by(Request.created_at.asc())
+    else:
+        query = query.order_by(Request.created_at.desc())
+
     requests_plus_one = (
         query
         .options(
             joinedload(Request.user),
             joinedload(Request.files)
         )
-        .order_by(Request.created_at.desc(), Request.id.desc())
         .offset(offset)
         .limit(limit + 1)
         .all()
@@ -177,7 +212,15 @@ def admin_get_all_requests(db: Session, page: int = 1, limit: int = 25):
         for r in requests
     ]
 
+    metrics_row = get_dashboard_metrics(db)
+
     return {
+        "metrics": {
+            "total_requests": metrics_row.get("total_requests", 0) if metrics_row else 0,
+            "pending_requests": metrics_row.get("pending_requests", 0) if metrics_row else 0,
+            "approved_requests": metrics_row.get("approved_requests", 0) if metrics_row else 0,
+            "rejected_requests": metrics_row.get("rejected_requests", 0) if metrics_row else 0
+        },
         "page": page,
         "limit": limit,
         "has_next": has_next,

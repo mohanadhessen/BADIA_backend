@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
@@ -12,6 +12,9 @@ from crud.review import (
 )
 from schemas.admin import ReviewPublishUpdate
 from schemas.review import AdminReviewResponse
+from crud.dashboard_metrics import refresh_review_metrics
+from cache.reviews import bump_global_reviews_version , bump_user_review_version, get_global_reviews_version
+from cache.etags import make_etag, check_etag
 
 
 router = APIRouter(
@@ -25,14 +28,30 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_reviews(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
+    q: str | None = None,
+    status: str | None = None,
+    rating: int | None = None,
+    sort: str = "newest",
     db: Session = Depends(get_db)
 ):
+    version = get_global_reviews_version()
+    etag_str = f"{version}:{page}:{limit}:{q}:{status}:{rating}:{sort}"
+    etag = make_etag(etag_str)
+    
+    if check_etag(request, response, etag):
+        return {}
+
     data = admin_get_all_review(
         db=db,
         page=page,
-        limit=limit
+        limit=limit,
+        q=q,
+        status=status,
+        rating=rating,
+        sort=sort
     )
     return data
 
@@ -60,6 +79,10 @@ def delete_review_endpoint(
     review_id: int,
     db: Session = Depends(get_db)
 ):
+    review = db.query(Review).filter(Review.id == review_id).first()
+    if review:
+        bump_user_review_version(review.user_id)
+    bump_global_reviews_version()
     success = delete_review(db=db, review_id=review_id)
 
     if not success:
@@ -68,6 +91,7 @@ def delete_review_endpoint(
             detail="Review not found"
         )
 
+    refresh_review_metrics(db)
     return {"success": True, "review_id": review_id}
 
 
@@ -91,4 +115,8 @@ def set_review_publish_status(
             detail="Review not found"
         )
 
+    bump_user_review_version(review.user_id)
+    bump_global_reviews_version()
+
+    refresh_review_metrics(db)
     return review

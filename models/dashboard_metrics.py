@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, TIMESTAMP, func
+from sqlalchemy import Column, Integer, Numeric, TIMESTAMP, func, JSON
 from database.base import Base
 
 class DashboardMetrics(Base):
@@ -12,8 +12,10 @@ class DashboardMetrics(Base):
     inactive_users = Column(Integer, nullable=False, server_default="0")
     verified_users = Column(Integer, nullable=False, server_default="0")
     unverified_users = Column(Integer, nullable=False, server_default="0")
+    
+    plans_distribution = Column(JSON, nullable=True)
 
-    # payments (excluding the two time-windowed fields — those stay live)
+    # payments
     total_payments = Column(Integer, nullable=False, server_default="0")
     paid_payments = Column(Integer, nullable=False, server_default="0")
     rejected_payments = Column(Integer, nullable=False, server_default="0")

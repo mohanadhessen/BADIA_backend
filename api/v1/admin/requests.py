@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request , BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import sentry_sdk
@@ -13,7 +13,9 @@ from schemas.request import AdminRequestResponse
 from models.user_file import UserFile
 from r2_client import s3
 from config import settings
-
+from crud.dashboard_metrics import refresh_requests_metrics
+from cache.requests import bump_global_requests_version , bump_user_requests_version, get_global_requests_version
+from cache.etags import make_etag, check_etag
 R2_BUCKET = settings.R2_BUCKET
 
 router = APIRouter(
@@ -26,14 +28,32 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_requests(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
+    q: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    plan: str | None = None,
+    sort: str = "newest",
     db: Session = Depends(get_db)
 ):
+    version = get_global_requests_version()
+    etag_str = f"{version}:{page}:{limit}:{q}:{type}:{status}:{plan}:{sort}"
+    etag = make_etag(etag_str)
+    
+    if check_etag(request, response, etag):
+        return {}
+
     data = admin_get_all_requests(
         db=db,
         page=page,
-        limit=limit
+        limit=limit,
+        q=q,
+        type=type,
+        status=status,
+        plan=plan,
+        sort=sort
     )
     return data
 
@@ -53,65 +73,6 @@ def get_requests_by_email_endpoint(
     requests = get_requests_by_user_email(db, email)
     return requests
 
-@router.patch("/requests/{request_id}/status")
-@limiter.limit("30/minute")
-def update_request_status_endpoint(
-    request: Request,
-    request_id: str,
-    body: StatusUpdate,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    updated_request = update_request_status(
-        db=db,
-        request_id=request_id,
-        new_status=body.status.value
-    )
-
-    if not updated_request:
-        raise HTTPException(
-            status_code=404,
-            detail="Request not found"
-        )
-
-    user_email = updated_request.user.email
-    user_name = f"{updated_request.user.first_name or ''} {updated_request.user.last_name or ''}".strip()
-    service_type = updated_request.service_type
-    is_approved = body.status.value  
-
-
-    background_tasks.add_task(
-        send_request_status_email,
-        user_email,
-        user_name,
-        service_type,
-        is_approved
-    )
-
-    return updated_request
-
-
-@router.delete("/requests/{request_id}")
-@limiter.limit("30/minute")
-def admin_delete_request(
-    request: Request,
-    request_id: str,
-    db: Session = Depends(get_db)
-):
-    result = delete_request(
-        db=db,
-        request_id=request_id,
-        s3=s3,
-        bucket=settings.R2_BUCKET
-    )
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    return {
-        "message": "Request deleted successfully",
-        **result
-    }
 
 @router.get("/requests/{request_id}/files/{file_id}")
 @limiter.limit("30/minute")
@@ -162,3 +123,71 @@ def download_request_file(
         "download_url": download_url,
         "filename": db_file.filename
     })
+
+
+@router.patch("/requests/{request_id}/status")
+@limiter.limit("30/minute")
+def update_request_status_endpoint(
+    request: Request,
+    request_id: str,
+    body: StatusUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    updated_request = update_request_status(
+        db=db,
+        request_id=request_id,
+        new_status=body.status.value
+    )
+
+    if not updated_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Request not found"
+        )
+    bump_user_requests_version(updated_request.user_id)
+    bump_global_requests_version()
+    user_email = updated_request.user.email
+    user_name = f"{updated_request.user.first_name or ''} {updated_request.user.last_name or ''}".strip()
+    service_type = updated_request.service_type
+    is_approved = body.status.value  
+
+
+    background_tasks.add_task(
+        send_request_status_email,
+        user_email,
+        user_name,
+        service_type,
+        is_approved
+    )
+
+    refresh_requests_metrics(db)
+    return updated_request
+
+
+@router.delete("/requests/{request_id}")
+@limiter.limit("30/minute")
+def admin_delete_request(
+    request: Request,
+    request_id: str,
+    db: Session = Depends(get_db)
+):
+    req = get_request_by_id(db=db, request_id=request_id)
+    if req:
+        bump_user_requests_version(req.user_id)
+    bump_global_requests_version()
+    result = delete_request(
+        db=db,
+        request_id=request_id,
+        s3=s3,
+        bucket=settings.R2_BUCKET
+    )
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    refresh_requests_metrics(db)
+    return {
+        "message": "Request deleted successfully",
+        **result
+    }

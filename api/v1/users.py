@@ -2,13 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request , Respons
 from sqlalchemy.orm import Session
 from schemas.user import UserUpdate, UserPasswordReset
 from database.session import get_db 
-from api.dependencies import get_current_user
+from api.dependencies import get_current_user, require_admin
 from models.user import User
-from crud.user import update_user_data, delete_user, update_user_password
+from crud.user import update_user_data, delete_user, update_user_password, get_user_by_email, create_new_user
 from security import verify_password, hash_password
 from api.rate_limiter import limiter
 from cache.user import get_user_version , bump_user_version , bump_global_users_version
 from cache.etags import make_etag , check_etag
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from crud.dashboard_metrics import refresh_user_metrics
 
 
 router = APIRouter(tags=["Users"])
@@ -94,7 +97,7 @@ def update_user_profile(
             detail="User not found"
         )
 
-    # 3. Return the exact same format as your GET endpoint
+    refresh_user_metrics(db)
     return {
         "status": "success",
         "user_info": {
@@ -135,6 +138,7 @@ def reset_user_password(
             detail="Could not update password"
         )
 
+    refresh_user_metrics(db)
     return {
         "status": "success",
         "message": "Password updated successfully"
@@ -163,10 +167,81 @@ def delete_user_profile(
             detail="User could not be deleted or does not exist"
         )
 
+    refresh_user_metrics(db)
     return {
         "status": "success",
         "message": "User account deleted successfully",
         "deleted_user": {
             "email": current_user.email
         }
-    }
+    }
+
+
+class AdminUserCreate(BaseModel):
+    first_name: str
+    last_name: str
+    company_name: str
+    email: EmailStr
+    password: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+def create_user_by_admin(
+    request: Request,
+    user_in: AdminUserCreate,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin)
+):
+    existing_user = get_user_by_email(db, user_in.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This email is already registered to a company.",
+        )
+    
+    raw_password = user_in.password
+    if not raw_password:
+        import secrets
+        raw_password = secrets.token_urlsafe(12)
+        
+    try:
+        new_user = create_new_user(
+            db=db,
+            first_name=user_in.first_name,
+            last_name=user_in.last_name,
+            company_name=user_in.company_name,
+            email=user_in.email,
+            password=hash_password(raw_password),
+            phone=user_in.phone,
+        )
+        
+        new_user.is_email_verified = True
+        db.commit()
+        
+        bump_global_users_version()
+        
+        refresh_user_metrics(db)
+        return {
+            "status": "success",
+            "message": "User created successfully",
+            "user": {
+                "id": new_user.id,
+                "email": new_user.email,
+                "first_name": new_user.first_name,
+                "last_name": new_user.last_name,
+                "company_name": new_user.company_name,
+                "phone": new_user.phone,
+                "role": new_user.role,
+                "is_active": new_user.is_active,
+                "is_email_verified": new_user.is_email_verified,
+                "created_at": new_user.created_at
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during user creation: {str(e)}",
+        )

@@ -10,6 +10,8 @@ from crud.dashboard_metrics import refresh_user_metrics
 
 
 
+from crud.dashboard_metrics import refresh_user_metrics, get_dashboard_metrics
+
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
@@ -125,8 +127,10 @@ def admin_get_all_users(
     limit: int = 25,
     only_active: bool = False,
     plan: str | None = None,
-    status: str | None = None
+    status: str | None = None,
+    q: str | None = None
 ):
+    from sqlalchemy import or_
     offset = (page - 1) * limit
 
     query = db.query(User).filter(User.role == "user")
@@ -140,9 +144,19 @@ def admin_get_all_users(
         from models.plan import Plan
         query = query.join(User.current_plan).filter(Plan.name == plan)
 
+    if q:
+        search_filters = [
+            User.email.ilike(f"%{q}%"),
+            User.first_name.ilike(f"%{q}%"),
+            User.last_name.ilike(f"%{q}%"),
+        ]
+        if q.isdigit():
+            search_filters.append(User.id == int(q))
+        query = query.filter(or_(*search_filters))
+
     rows = (
         query
-        .order_by(User.created_at.desc(), User.id.desc())
+        .order_by(User.id.desc())
         .offset(offset)
         .limit(limit + 1)   # fetch one extra to detect next page
         .all()
@@ -151,7 +165,16 @@ def admin_get_all_users(
     has_next = len(rows) > limit
     users = rows[:limit]
 
+    metrics_row = get_dashboard_metrics(db)
+
     return {
+        "metrics": {
+            "total_users": metrics_row.get("total_users", 0) if metrics_row else 0,
+            "active_users": metrics_row.get("active_users", 0) if metrics_row else 0,
+            "inactive_users": metrics_row.get("inactive_users", 0) if metrics_row else 0,
+            "verified_users": metrics_row.get("verified_users", 0) if metrics_row else 0,
+            "unverified_users": metrics_row.get("unverified_users", 0) if metrics_row else 0
+        },
         "page": page,
         "limit": limit,
         "has_next": has_next,
@@ -161,36 +184,10 @@ def admin_get_all_users(
 
 
 
-import time
-
-_plans_distribution_cache = {}
-_PLANS_CACHE_TTL = 300  # 5 minutes
+from crud.dashboard_metrics import get_dashboard_metrics
 
 def get_users_plans_distribution(db: Session):
-    now = time.monotonic()
-    if "data" in _plans_distribution_cache and (now - _plans_distribution_cache["time"]) < _PLANS_CACHE_TTL:
-        return _plans_distribution_cache["data"]
-
-    results = (
-        db.query(
-            func.coalesce(Plan.name, "No Plan").label("plan"),
-            func.count(User.id).label("count")
-        )
-        .select_from(User)
-        .filter(User.role == "user")
-        .outerjoin(Plan, User.current_plan_id == Plan.id)
-        .group_by(Plan.id, Plan.name)
-        .all()
-    )
-
-    data = [
-        {
-            "plan": row.plan,
-            "count": row.count
-        }
-        for row in results
-    ]
-
-    _plans_distribution_cache["data"] = data
-    _plans_distribution_cache["time"] = now
-    return data
+    metrics_row = get_dashboard_metrics(db)
+    if metrics_row and metrics_row.get("plans_distribution"):
+        return metrics_row.get("plans_distribution")
+    return []

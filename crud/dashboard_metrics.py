@@ -1,339 +1,244 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from decimal import Decimal
-from typing import Optional
+from sqlalchemy import select, func, case , update , and_
 
 from models.dashboard_metrics import DashboardMetrics
 from models.user import User
 from models.payment import Payment
 from models.review import Review
 from models.request import Request
+from models.plan import Plan
+from datetime import datetime
+
+import time
 
 
-SINGLETON_ID = 1
+def get_dashboard_metrics(db: Session):
+    start_total = time.perf_counter()
+
+    # 1) cached metrics query
+    t0 = time.perf_counter()
+    metrics = db.query(DashboardMetrics).first()
+    t1 = time.perf_counter()
+
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # 2) live aggregation query
+    t2 = time.perf_counter()
+    live_row = db.execute(
+        select(
+            func.sum(case((Payment.start_date >= month_start, 1), else_=0)).label("payments_this_month"),
+            func.sum(
+                case(
+                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    else_=0,
+                )
+            ).label("revenue_this_month"),
+        )
+    ).one()
+    t3 = time.perf_counter()
+
+    total_ms = (time.perf_counter() - start_total) * 1000
+
+    return {
+        "total_users": metrics.total_users,
+        "active_users": metrics.active_users,
+        "inactive_users": metrics.inactive_users,
+        "verified_users": metrics.verified_users,
+        "unverified_users": metrics.unverified_users,
+        "plans_distribution": metrics.plans_distribution,
+        "total_payments": metrics.total_payments,
+        "paid_payments": metrics.paid_payments,
+        "rejected_payments": metrics.rejected_payments,
+        "canceled_payments": metrics.canceled_payments,
+        "monthly_payments": metrics.monthly_payments,
+        "yearly_payments": metrics.yearly_payments,
+        "total_revenue": metrics.total_revenue,
+        "total_reviews": metrics.total_reviews,
+        "published_reviews": metrics.published_reviews,
+        "pending_reviews": metrics.pending_reviews,
+        "total_requests": metrics.total_requests,
+        "pending_requests": metrics.pending_requests,
+        "approved_requests": metrics.approved_requests,
+        "rejected_requests": metrics.rejected_requests,
+        "updated_at": metrics.updated_at,
+
+        "payments_this_month": int(live_row.payments_this_month or 0),
+        "revenue_this_month": live_row.revenue_this_month or 0,
+
+        # latency metrics (ms)
+        "latency_ms": {
+            "metrics_query": (t1 - t0) * 1000,
+            "live_query": (t3 - t2) * 1000,
+            "total": total_ms,
+        },
+    }
 
 
-# ──────────────────────────────────────────────
-#  Core helpers
-# ──────────────────────────────────────────────
-
-def get_dashboard_metrics(db: Session) -> Optional[DashboardMetrics]:
-    """Return the single dashboard-metrics row (or None if it hasn't been seeded)."""
-    return db.query(DashboardMetrics).filter(DashboardMetrics.id == SINGLETON_ID).first()
 
 
-def upsert_dashboard_metrics(db: Session, **kwargs) -> DashboardMetrics:
-    """
-    Insert the singleton row if it doesn't exist, otherwise update only the
-    supplied keyword arguments.  Accepts any column name defined on the model.
-    """
-    row = get_dashboard_metrics(db)
-    if row is None:
-        row = DashboardMetrics(id=SINGLETON_ID, **kwargs)
-        db.add(row)
-    else:
-        for key, value in kwargs.items():
-            if hasattr(row, key):
-                setattr(row, key, value)
+
+
+def refresh_user_metrics(db: Session):
+    row = db.execute(
+        select(
+            func.count(User.id).label("total"),
+            func.sum(case((User.is_active == True, 1), else_=0)).label("active"),
+            func.sum(case((User.is_active == False, 1), else_=0)).label("inactive"),
+            func.sum(case((User.is_email_verified == True, 1), else_=0)).label("verified"),
+            func.sum(case((User.is_email_verified == False, 1), else_=0)).label("unverified"),
+        )
+    ).one()
+
+    plan_rows = db.execute(
+        select(
+            User.current_plan_id.label("plan_id"),
+            func.count(User.id).label("count"),
+        )
+        .group_by(User.current_plan_id)
+    ).all()
+
+    plan_names = {
+        p.id: p.name
+        for p in db.execute(select(Plan.id, Plan.name)).all()
+    }
+
+    plans_distribution = {
+        (plan_names.get(plan_id, "no_plan") if plan_id is not None else "no_plan"): count
+        for plan_id, count in plan_rows
+    }
+
+    db.execute(
+        update(DashboardMetrics)
+        .where(DashboardMetrics.id == 1)
+        .values(
+            total_users=row.total,
+            active_users=row.active,
+            inactive_users=row.inactive,
+            verified_users=row.verified,
+            unverified_users=row.unverified,
+            plans_distribution=plans_distribution,
+        )
+    )
+
     db.commit()
-    db.refresh(row)
-    return row
 
 
-# ──────────────────────────────────────────────
-#  Individual field updaters
-# ──────────────────────────────────────────────
-
-# -- Users --
-def update_total_users(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, total_users=value)
-
-def update_active_users(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, active_users=value)
-
-def update_inactive_users(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, inactive_users=value)
-
-def update_verified_users(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, verified_users=value)
-
-def update_unverified_users(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, unverified_users=value)
-
-# -- Payments --
-def update_total_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, total_payments=value)
-
-def update_paid_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, paid_payments=value)
-
-def update_rejected_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, rejected_payments=value)
-
-def update_canceled_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, canceled_payments=value)
-
-def update_monthly_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, monthly_payments=value)
-
-def update_yearly_payments(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, yearly_payments=value)
-
-def update_total_revenue(db: Session, value: Decimal) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, total_revenue=value)
-
-# -- Reviews --
-def update_total_reviews(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, total_reviews=value)
-
-def update_published_reviews(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, published_reviews=value)
-
-def update_pending_reviews(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, pending_reviews=value)
-
-# -- Requests --
-def update_total_requests(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, total_requests=value)
-
-def update_pending_requests(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, pending_requests=value)
-
-def update_approved_requests(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, approved_requests=value)
-
-def update_rejected_requests(db: Session, value: int) -> DashboardMetrics:
-    return upsert_dashboard_metrics(db, rejected_requests=value)
 
 
-# ──────────────────────────────────────────────
-#  Bulk updaters (set all fields in a group)
-# ──────────────────────────────────────────────
 
-def update_user_metrics(
-    db: Session,
-    total_users: int,
-    active_users: int,
-    inactive_users: int,
-    verified_users: int,
-    unverified_users: int,
-) -> DashboardMetrics:
-    return upsert_dashboard_metrics(
-        db,
-        total_users=total_users,
-        active_users=active_users,
-        inactive_users=inactive_users,
-        verified_users=verified_users,
-        unverified_users=unverified_users,
+def refresh_review_metrics(db: Session):
+    row = db.execute(
+        select(
+            func.count(Review.id).label("total_reviews"),
+            func.sum(case((Review.is_published == True, 1), else_=0)).label("published_reviews"),
+            func.sum(case((Review.is_published == False, 1), else_=0)).label("pending_reviews"),
+        )
+    ).one()
+
+    db.execute(
+        update(DashboardMetrics)
+        .where(DashboardMetrics.id == 1)
+        .values(
+            total_reviews=row.total_reviews,
+            published_reviews=row.published_reviews,
+            pending_reviews=row.pending_reviews,
+        )
     )
+    db.commit()
 
 
-def update_payment_metrics(
-    db: Session,
-    total_payments: int,
-    paid_payments: int,
-    rejected_payments: int,
-    canceled_payments: int,
-    monthly_payments: int,
-    yearly_payments: int,
-    total_revenue: Decimal,
-) -> DashboardMetrics:
-    return upsert_dashboard_metrics(
-        db,
-        total_payments=total_payments,
-        paid_payments=paid_payments,
-        rejected_payments=rejected_payments,
-        canceled_payments=canceled_payments,
-        monthly_payments=monthly_payments,
-        yearly_payments=yearly_payments,
-        total_revenue=total_revenue,
+
+def refresh_requests_metrics(db: Session):
+    row = db.execute(
+        select(
+            func.count(Request.id).label("total_requests"),
+            func.sum(case((Request.status == "pending", 1), else_=0)).label("pending_requests"),
+            func.sum(case((Request.status == "approved", 1), else_=0)).label("approved_requests"),
+            func.sum(case((Request.status == "rejected", 1), else_=0)).label("rejected_requests"),
+        )
+    ).one()
+
+    db.execute(
+        update(DashboardMetrics)
+        .where(DashboardMetrics.id == 1)
+        .values(
+            total_requests=row.total_requests,
+            pending_requests=row.pending_requests,
+            approved_requests=row.approved_requests,
+            rejected_requests=row.rejected_requests,
+        )
     )
+    db.commit()
+    
 
 
-def update_review_metrics(
-    db: Session,
-    total_reviews: int,
-    published_reviews: int,
-    pending_reviews: int,
-) -> DashboardMetrics:
-    return upsert_dashboard_metrics(
-        db,
-        total_reviews=total_reviews,
-        published_reviews=published_reviews,
-        pending_reviews=pending_reviews,
+
+def refresh_payment_metrics(db: Session):
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    row = db.execute(
+        select(
+            func.count(Payment.id).label("total_payments"),
+            func.sum(case((Payment.status == "paid", 1), else_=0)).label("paid_payments"),
+            func.sum(case((Payment.status == "rejected", 1), else_=0)).label("rejected_payments"),
+            func.sum(case((Payment.status == "canceled", 1), else_=0)).label("canceled_payments"),
+            func.sum(case((Payment.billing_cycle == "monthly", 1), else_=0)).label("monthly_payments"),
+            func.sum(case((Payment.billing_cycle == "yearly", 1), else_=0)).label("yearly_payments"),
+            func.sum(
+                case((Payment.start_date >= month_start, 1), else_=0)
+            ).label("payments_this_month"),
+            func.sum(
+                case((Payment.status == "paid", Payment.amount), else_=0)
+            ).label("total_revenue"),
+            func.sum(
+                case(
+                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    else_=0,
+                )
+            ).label("revenue_this_month"),
+        )
+    ).one()
+
+    db.execute(
+        update(DashboardMetrics)
+        .where(DashboardMetrics.id == 1)
+        .values(
+            total_payments=row.total_payments,
+            paid_payments=row.paid_payments,
+            rejected_payments=row.rejected_payments,
+            canceled_payments=row.canceled_payments,
+            monthly_payments=row.monthly_payments,
+            yearly_payments=row.yearly_payments,
+            total_revenue=row.total_revenue or 0,
+        )
     )
+    db.commit()
 
 
-def update_request_metrics(
-    db: Session,
-    total_requests: int,
-    pending_requests: int,
-    approved_requests: int,
-    rejected_requests: int,
-) -> DashboardMetrics:
-    return upsert_dashboard_metrics(
-        db,
-        total_requests=total_requests,
-        pending_requests=pending_requests,
-        approved_requests=approved_requests,
-        rejected_requests=rejected_requests,
-    )
 
 
-def update_all_metrics(
-    db: Session,
-    total_users: int, active_users: int, inactive_users: int,
-    verified_users: int, unverified_users: int,
-    total_payments: int, paid_payments: int, rejected_payments: int,
-    canceled_payments: int, monthly_payments: int, yearly_payments: int,
-    total_revenue: Decimal,
-    total_reviews: int, published_reviews: int, pending_reviews: int,
-    total_requests: int, pending_requests: int,
-    approved_requests: int, rejected_requests: int,
-) -> DashboardMetrics:
-    return upsert_dashboard_metrics(
-        db,
-        total_users=total_users, active_users=active_users,
-        inactive_users=inactive_users, verified_users=verified_users,
-        unverified_users=unverified_users,
-        total_payments=total_payments, paid_payments=paid_payments,
-        rejected_payments=rejected_payments, canceled_payments=canceled_payments,
-        monthly_payments=monthly_payments, yearly_payments=yearly_payments,
-        total_revenue=total_revenue,
-        total_reviews=total_reviews, published_reviews=published_reviews,
-        pending_reviews=pending_reviews,
-        total_requests=total_requests, pending_requests=pending_requests,
-        approved_requests=approved_requests, rejected_requests=rejected_requests,
-    )
 
 
-# ══════════════════════════════════════════════
-#  REFRESH helpers — re-count from live tables
-#  Call these after any mutation that affects
-#  the corresponding entity.
-# ══════════════════════════════════════════════
 
-def refresh_user_metrics(db: Session) -> DashboardMetrics:
-    """Re-count every user metric from the users table and persist."""
-    base = db.query(func.count(User.id)).filter(User.role == "user")
+def get_this_month_payment_stats(db: Session):
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    total    = base.scalar() or 0
-    active   = base.filter(User.is_active == True).scalar() or 0
-    inactive = base.filter(User.is_active == False).scalar() or 0
-    verified = base.filter(User.is_email_verified == True).scalar() or 0
-    unverified = base.filter(User.is_email_verified == False).scalar() or 0
+    row = db.execute(
+        select(
+            func.sum(case((Payment.start_date >= month_start, 1), else_=0)).label("payments_this_month"),
+            func.sum(
+                case(
+                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    else_=0,
+                )
+            ).label("revenue_this_month"),
+        )
+    ).one()
 
-    return upsert_dashboard_metrics(
-        db,
-        total_users=total,
-        active_users=active,
-        inactive_users=inactive,
-        verified_users=verified,
-        unverified_users=unverified,
-    )
-
-
-def refresh_payment_metrics(db: Session) -> DashboardMetrics:
-    """Re-count every payment metric from the payments table and persist."""
-    total     = db.query(func.count(Payment.id)).scalar() or 0
-    paid      = db.query(func.count(Payment.id)).filter(Payment.status == "paid").scalar() or 0
-    rejected  = db.query(func.count(Payment.id)).filter(Payment.status == "rejected").scalar() or 0
-    canceled  = db.query(func.count(Payment.id)).filter(Payment.status == "canceled").scalar() or 0
-    monthly   = db.query(func.count(Payment.id)).filter(Payment.billing_cycle == "monthly").scalar() or 0
-    yearly    = db.query(func.count(Payment.id)).filter(Payment.billing_cycle == "yearly").scalar() or 0
-    revenue   = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.status.in_(["paid", "canceled"]))
-        .scalar()
-    )
-
-    return upsert_dashboard_metrics(
-        db,
-        total_payments=total,
-        paid_payments=paid,
-        rejected_payments=rejected,
-        canceled_payments=canceled,
-        monthly_payments=monthly,
-        yearly_payments=yearly,
-        total_revenue=revenue,
-    )
-
-
-def refresh_review_metrics(db: Session) -> DashboardMetrics:
-    """Re-count every review metric from the reviews table and persist."""
-    total     = db.query(func.count(Review.id)).scalar() or 0
-    published = db.query(func.count(Review.id)).filter(Review.is_published == True).scalar() or 0
-    pending   = db.query(func.count(Review.id)).filter(Review.is_published == False).scalar() or 0
-
-    return upsert_dashboard_metrics(
-        db,
-        total_reviews=total,
-        published_reviews=published,
-        pending_reviews=pending,
-    )
-
-
-def refresh_request_metrics(db: Session) -> DashboardMetrics:
-    """Re-count every request metric from the requests table and persist."""
-    total    = db.query(func.count(Request.id)).scalar() or 0
-    pending  = db.query(func.count(Request.id)).filter(Request.status == "pending").scalar() or 0
-    approved = db.query(func.count(Request.id)).filter(Request.status == "approved").scalar() or 0
-    rejected = db.query(func.count(Request.id)).filter(Request.status == "rejected").scalar() or 0
-
-    return upsert_dashboard_metrics(
-        db,
-        total_requests=total,
-        pending_requests=pending,
-        approved_requests=approved,
-        rejected_requests=rejected,
-    )
-
-
-def refresh_all_metrics(db: Session) -> DashboardMetrics:
-    """Full refresh — re-counts every metric from every source table."""
-    # Users
-    user_base = db.query(func.count(User.id)).filter(User.role == "user")
-    total_users    = user_base.scalar() or 0
-    active_users   = db.query(func.count(User.id)).filter(User.role == "user", User.is_active == True).scalar() or 0
-    inactive_users = db.query(func.count(User.id)).filter(User.role == "user", User.is_active == False).scalar() or 0
-    verified_users = db.query(func.count(User.id)).filter(User.role == "user", User.is_email_verified == True).scalar() or 0
-    unverified_users = db.query(func.count(User.id)).filter(User.role == "user", User.is_email_verified == False).scalar() or 0
-
-    # Payments
-    total_payments = db.query(func.count(Payment.id)).scalar() or 0
-    paid_payments  = db.query(func.count(Payment.id)).filter(Payment.status == "paid").scalar() or 0
-    rejected_payments = db.query(func.count(Payment.id)).filter(Payment.status == "rejected").scalar() or 0
-    canceled_payments = db.query(func.count(Payment.id)).filter(Payment.status == "canceled").scalar() or 0
-    monthly_payments  = db.query(func.count(Payment.id)).filter(Payment.billing_cycle == "monthly").scalar() or 0
-    yearly_payments   = db.query(func.count(Payment.id)).filter(Payment.billing_cycle == "yearly").scalar() or 0
-    total_revenue = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.status.in_(["paid", "canceled"]))
-        .scalar()
-    )
-
-    # Reviews
-    total_reviews     = db.query(func.count(Review.id)).scalar() or 0
-    published_reviews = db.query(func.count(Review.id)).filter(Review.is_published == True).scalar() or 0
-    pending_reviews   = db.query(func.count(Review.id)).filter(Review.is_published == False).scalar() or 0
-
-    # Requests
-    total_requests    = db.query(func.count(Request.id)).scalar() or 0
-    pending_requests  = db.query(func.count(Request.id)).filter(Request.status == "pending").scalar() or 0
-    approved_requests = db.query(func.count(Request.id)).filter(Request.status == "approved").scalar() or 0
-    rejected_requests = db.query(func.count(Request.id)).filter(Request.status == "rejected").scalar() or 0
-
-    return upsert_dashboard_metrics(
-        db,
-        total_users=total_users, active_users=active_users,
-        inactive_users=inactive_users, verified_users=verified_users,
-        unverified_users=unverified_users,
-        total_payments=total_payments, paid_payments=paid_payments,
-        rejected_payments=rejected_payments, canceled_payments=canceled_payments,
-        monthly_payments=monthly_payments, yearly_payments=yearly_payments,
-        total_revenue=total_revenue,
-        total_reviews=total_reviews, published_reviews=published_reviews,
-        pending_reviews=pending_reviews,
-        total_requests=total_requests, pending_requests=pending_requests,
-        approved_requests=approved_requests, rejected_requests=rejected_requests,
-    )
+    return {
+        "payments_this_month": row.payments_this_month or 0,
+        "revenue_this_month": row.revenue_this_month or 0,
+    }

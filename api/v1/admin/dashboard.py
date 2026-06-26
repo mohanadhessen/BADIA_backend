@@ -10,6 +10,8 @@ from crud.payment import admin_get_all_payments
 from crud.plan import get_all_plans
 from crud.metrics import get_emails_metric, get_files_metric
 from crud.dashboard_metrics import get_dashboard_metrics
+from cache.dashboard import get_dashboard_version
+from cache.etags import check_etag, make_etag
 
 import time
 
@@ -39,6 +41,12 @@ def get_dashboard_data(
 ):
     total_start = time.perf_counter()
 
+    version = get_dashboard_version()
+    etag_str = f"{version}:{users_page}:{users_limit}:{users_only_active}:{reviews_page}:{reviews_limit}:{requests_page}:{requests_limit}:{payments_page}:{payments_limit}:{payments_status}"
+    etag = make_etag(etag_str)
+    if check_etag(request, response, etag):
+        return {}
+
     start = time.perf_counter()
     metrics_row = get_dashboard_metrics(db)
     print(f"metrics_row: {(time.perf_counter() - start) * 1000:.2f} ms")
@@ -47,33 +55,24 @@ def get_dashboard_data(
     if metrics_row:
         metrics = {
             "users": {
-                "total_users": metrics_row.total_users,
-                "active_users": metrics_row.active_users,
-                "inactive_users": metrics_row.inactive_users,
-                "verified_users": metrics_row.verified_users,
-                "unverified_users": metrics_row.unverified_users,
+                "total_users": metrics_row.get("total_users"),
             },
             "payments": {
-                "total_payments": metrics_row.total_payments,
-                "paid_payments": metrics_row.paid_payments,
-                "rejected_payments": metrics_row.rejected_payments,
-                "canceled_payments": metrics_row.canceled_payments,
-                "monthly_payments": metrics_row.monthly_payments,
-                "yearly_payments": metrics_row.yearly_payments,
-                "total_revenue": float(metrics_row.total_revenue),
+                "paid_payments": metrics_row.get("paid_payments"),
+                "total_revenue": float(metrics_row.get("total_revenue", 0)),
             },
             "reviews": {
-                "total_reviews": metrics_row.total_reviews,
-                "published_reviews": metrics_row.published_reviews,
-                "pending_reviews": metrics_row.pending_reviews,
+                "total_reviews": metrics_row.get("total_reviews"),
+                "published_reviews": metrics_row.get("published_reviews"),
+                "pending_reviews": metrics_row.get("pending_reviews"),
             },
             "requests": {
-                "total_requests": metrics_row.total_requests,
-                "pending_requests": metrics_row.pending_requests,
-                "approved_requests": metrics_row.approved_requests,
-                "rejected_requests": metrics_row.rejected_requests,
+                "total_requests": metrics_row.get("total_requests"),
+                "pending_requests": metrics_row.get("pending_requests"),
+                "approved_requests": metrics_row.get("approved_requests"),
+                "rejected_requests": metrics_row.get("rejected_requests"),
             },
-            "updated_at": metrics_row.updated_at,
+            "updated_at": metrics_row.get("updated_at"),
         }
 
     start = time.perf_counter()
@@ -102,7 +101,8 @@ def get_dashboard_data(
     requests_data = admin_get_all_requests(
         db=db,
         page=requests_page,
-        limit=requests_limit
+        limit=requests_limit,
+        status="pending"
     )
     print(f"requests_data: {(time.perf_counter() - start) * 1000:.2f} ms")
 

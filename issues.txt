@@ -54,7 +54,7 @@ OPEN
 [ ] Still sync SQLAlchemy + pymysql, no real async DB layer (a couple of
     isolated async def routes only)
     bucket scan on every load - needs caching (5-15 min TTL)
-[ ] Admin dashboard: admin_get_all_* crud functions each do separate
+[x] Admin dashboard: admin_get_all_* crud functions each do separate
     count + select queries - combine via window function (lower priority,
     real fix is async + concurrent queries once the async migration lands)
 

@@ -9,6 +9,7 @@ import httpx
 from security import create_access_token, create_refresh_token , set_auth_cookies
 from api.rate_limiter import limiter
 import secrets
+from crud.dashboard_metrics import refresh_user_metrics
 
 
 
@@ -141,4 +142,5 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db)):
 
     set_auth_cookies(redirect_response, access_token, refresh_token, role=user.role)
 
+    refresh_user_metrics(db)
     return redirect_response

@@ -14,7 +14,7 @@ class User(Base):
     avatar_url = Column(Text)
     auth_provider = Column(Enum("local", "google", name="auth_provider"), nullable=False, server_default="local")
     is_email_verified = Column(Boolean, nullable=False, server_default="0", index=True)
-    current_plan_id = Column(Integer, ForeignKey("plans.id", ondelete="SET NULL"), nullable=True, default=None)
+    current_plan_id = Column(Integer, ForeignKey("plans.id", ondelete="SET NULL"), nullable=True, default=None,index=True)
     subscription_end_date = Column(TIMESTAMP)
     created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())

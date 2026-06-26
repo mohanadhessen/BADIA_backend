@@ -1,23 +1,19 @@
-from cache.user import get_users_version
-from cache.plans import get_plans_version
-from cache.requests import get_requests_version
-from cache.payments import get_payments_version
-from cache.reviews import get_reviews_version
-from cache.storage import get_storage_version
-from cache.emails import get_emails_version
 from cache.etags import make_etag
+from cache.redis import redis_client
 
+VERSION_KEYS = [
+    "users:version",
+    "plans:version",
+    "requests:global_version",
+    "payments:version",
+    "reviews:version",
+    "storage:version",
+    "emails:version",
+]
 
 def get_dashboard_version() -> int:
-    return (
-        get_users_version()
-        + get_plans_version()
-        + get_requests_version()
-        + get_payments_version()
-        + get_reviews_version()
-        + get_storage_version()
-        + get_emails_version()
-    )
+    values = redis_client.mget(VERSION_KEYS)
+    return sum(int(v or 0) for v in values)
 
 
 def get_dashboard_etag() -> str:

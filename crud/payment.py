@@ -2,12 +2,14 @@ from models.payment import Payment
 from models.user import User
 from models.plan import Plan
 from sqlalchemy.orm import Session , joinedload
-from sqlalchemy import func
+from sqlalchemy import or_
 from schemas.payment import PaymentBase , PaymentUpdate
 from datetime import datetime
 from crud.dashboard_metrics import refresh_payment_metrics
 
 
+
+from crud.dashboard_metrics import refresh_payment_metrics, get_dashboard_metrics
 
 def get_payment_by_user_id(
     db: Session,
@@ -117,12 +119,16 @@ def admin_get_all_payments(
     db: Session,
     page: int = 1,
     limit: int = 25,
-    status: str | None = None
+    q: str | None = None,
+    status: str | None = None,
+    sort: str = "newest",
 ):
     offset = (page - 1) * limit
 
     query = (
         db.query(Payment)
+        .join(Payment.user)
+        .join(Payment.plan)
         .options(
             joinedload(Payment.user),
             joinedload(Payment.plan)
@@ -132,9 +138,25 @@ def admin_get_all_payments(
     if status:
         query = query.filter(Payment.status == status)
 
+    if q:
+        search_filters = [
+            User.email.ilike(f"%{q}%"),
+            User.first_name.ilike(f"%{q}%"),
+            User.last_name.ilike(f"%{q}%"),
+            Plan.name.ilike(f"%{q}%"),
+        ]
+        if q.isdigit():
+            search_filters.append(Payment.id == int(q))
+
+        query = query.filter(or_(*search_filters))
+
+    if sort == "oldest":
+        query = query.order_by(Payment.created_at.asc())
+    else:  # default / "newest"
+        query = query.order_by(Payment.created_at.desc())
+
     payments_plus_one = (
         query
-        .order_by(Payment.created_at.desc(), Payment.id.desc())
         .offset(offset)
         .limit(limit + 1)
         .all()
@@ -143,7 +165,20 @@ def admin_get_all_payments(
     has_next = len(payments_plus_one) > limit
     payments = payments_plus_one[:limit]
 
+    metrics_row = get_dashboard_metrics(db)
+
     return {
+        "metrics": {
+            "total_payments": metrics_row.get("total_payments", 0) if metrics_row else 0,
+            "paid_payments": metrics_row.get("paid_payments", 0) if metrics_row else 0,
+            "rejected_payments": metrics_row.get("rejected_payments", 0) if metrics_row else 0,
+            "canceled_payments": metrics_row.get("canceled_payments", 0) if metrics_row else 0,
+            "monthly_payments": metrics_row.get("monthly_payments", 0) if metrics_row else 0,
+            "yearly_payments": metrics_row.get("yearly_payments", 0) if metrics_row else 0,
+            "payments_this_month": metrics_row.get("payments_this_month", 0) if metrics_row else 0,
+            "total_revenue": float(metrics_row.get("total_revenue", 0)) if metrics_row else 0.0,
+            "revenue_this_month": float(metrics_row.get("revenue_this_month", 0)) if metrics_row else 0.0,
+        },
         "page": page,
         "limit": limit,
         "has_next": has_next,

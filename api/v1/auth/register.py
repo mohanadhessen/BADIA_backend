@@ -8,6 +8,7 @@ from security import hash_password , create_access_token , create_refresh_token 
 from api.rate_limiter import limiter
 from email_tokens import create_email_verification_token
 from email_service import send_verification_email
+from crud.dashboard_metrics import refresh_user_metrics
 
 
 
@@ -54,6 +55,7 @@ def register_company(
     
         set_auth_cookies(response, access_token, new_refresh_token, role=new_user.role)
     
+        refresh_user_metrics(db)
         return {
             "status": "success",
             "message": "Company account created",

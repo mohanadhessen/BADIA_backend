@@ -21,6 +21,7 @@ from cache.reviews import (
     get_review_version
 )
 from cache.etags import make_etag, check_etag
+from crud.dashboard_metrics import refresh_review_metrics
 
 
 router = APIRouter(tags=["Reviews"])
@@ -84,6 +85,7 @@ def create_review_endpoint(
 
     bump_user_review_version(current_user.id)
     bump_global_reviews_version()
+    refresh_review_metrics(db)
 
     return review
 
@@ -114,6 +116,7 @@ def update_review_endpoint(
 
     bump_user_review_version(current_user.id)
     bump_global_reviews_version()
+    refresh_review_metrics(db)
 
     return updated
 
@@ -140,5 +143,6 @@ def delete_review_endpoint(
 
     bump_user_review_version(current_user.id)
     bump_global_reviews_version()
+    refresh_review_metrics(db)
 
     return {"status": "success"}

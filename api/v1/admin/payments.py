@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
@@ -9,6 +9,9 @@ from crud.plan import get_plan_by_id
 from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id, get_payments_by_user_email
 from email_service import send_plan_update_email , send_plan_cancelled_by_admin_email
 from schemas.payment import PaymentBase , PaymentUpdate, AdminPaymentResponse
+from crud.dashboard_metrics import refresh_payment_metrics
+from cache.payments import get_payments_version, bump_payments_version, bump_payment_version
+from cache.etags import make_etag, check_etag
 
 
 
@@ -23,16 +26,28 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_payments(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
+    q: str | None = None,
     status: str | None = None,
+    sort: str = "newest",
     db: Session = Depends(get_db)
 ):
+    version = get_payments_version()
+    etag_str = f"{version}:{page}:{limit}:{q}:{status}:{sort}"
+    etag = make_etag(etag_str)
+    
+    if check_etag(request, response, etag):
+        return {}
+
     data = admin_get_all_payments(
         db=db,
         page=page,
         limit=limit,
-        status=status
+        q=q,
+        status=status,
+        sort=sort
     )
     return data
 
@@ -87,6 +102,9 @@ def create_new_payment(
             billing_cycle=payment.billing_cycle,
             transaction_id=str(payment.id)
         )
+    refresh_payment_metrics(db)
+    bump_payments_version()
+    bump_payment_version(payment.id)
     return {"message": "Payment created successfully", "payment_id": payment.id}
 
 @router.patch("/payments/{payment_id}")
@@ -133,6 +151,9 @@ def update_payment_endpoint(
                 plan_name=plan.name,
             )
 
+    refresh_payment_metrics(db)
+    bump_payments_version()
+    bump_payment_version(payment.id)
     return {
         "message": "Payment updated successfully",
         "payment_id": payment.id,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 from database.session import get_db
 from api.dependencies import require_admin
@@ -16,6 +16,9 @@ from crud.user import (
 )
 from schemas.admin import AdminUserUpdateSchema
 from schemas.user import AdminUserSearchResponse
+from crud.dashboard_metrics import refresh_user_metrics 
+from cache.user import get_global_users_version, bump_global_users_version, bump_user_version
+from cache.etags import make_etag, check_etag
 
 
 router = APIRouter(
@@ -29,13 +32,22 @@ router = APIRouter(
 @limiter.limit("60/minute")
 def get_all_users(
     request: Request,
+    response: Response,
     page: int = 1,
     limit: int = 25,
     only_active: bool = False,
     plan: str | None = None,
     status: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db)
 ):
+    version = get_global_users_version()
+    etag_str = f"{version}:{page}:{limit}:{only_active}:{plan}:{status}:{q}"
+    etag = make_etag(etag_str)
+    
+    if check_etag(request, response, etag):
+        return {}
+
     filters = [User.role == "user"]
     if only_active or status == "active":
         filters.append(User.is_active == True)
@@ -52,7 +64,8 @@ def get_all_users(
         limit=limit,
         only_active=only_active,
         plan=plan,
-        status=status
+        status=status,
+        q=q
     )
     return data
 
@@ -88,6 +101,9 @@ def update_user_data(
             detail="User not found"
         )
 
+    refresh_user_metrics(db)
+    bump_global_users_version()
+    bump_user_version(updated_user.id)
     return updated_user
 
 
@@ -114,6 +130,9 @@ def delete_user_endpoint(
     if not success:
         raise HTTPException(400, "Could not delete user")
 
+    refresh_user_metrics(db)
+    bump_global_users_version()
+    bump_user_version(user.id)
     return {"message": "User deleted successfully"}
 
 

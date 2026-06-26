@@ -5,7 +5,7 @@ from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from schemas.plan import PlanUpdate, PlanResponse, PlanBase
 from crud.plan import get_plan_by_id, update_plan, get_plan_by_name, delete_plan, create_plan
-
+from cache.plans import bump_plans_version 
 router = APIRouter(
     prefix="",
     tags=["Admin - Plans"],
@@ -26,7 +26,7 @@ def create_new_plan(
             status_code=400,
             detail="Plan name already exists"
         )
-
+    bump_plans_version()
     plan = create_plan(
         db=db,
         data=plan_data.model_dump()
@@ -42,8 +42,9 @@ def edit_plan(
     plan_data: PlanUpdate,
     db: Session = Depends(get_db),
 ):
-    plan = get_plan_by_id(db, plan_id)
 
+    plan = get_plan_by_id(db, plan_id)
+    
     if not plan:
         raise HTTPException(404, "Plan not found")
 
@@ -53,7 +54,7 @@ def edit_plan(
         get_plan_by_name(db, plan_data.name)
     ):
         raise HTTPException(400, "Plan name already exists")
-
+    bump_plans_version()
     return update_plan(
         db=db,
         plan=plan,
@@ -70,7 +71,7 @@ def delete_plan_by_id(
     plan = get_plan_by_id(db, plan_id)
     if not plan:
         raise HTTPException(404, "Plan not found")
-    
+    bump_plans_version()
     delete_plan(db, plan)
     
     return {"message": "Plan deleted successfully"}
