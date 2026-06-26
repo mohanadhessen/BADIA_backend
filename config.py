@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_NAME: str
     DB_PORT: int = 3306
+    DB_SSL: bool = False
 
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str

@@ -18,6 +18,11 @@ def get_dashboard_metrics(db: Session):
     # 1) cached metrics query
     t0 = time.perf_counter()
     metrics = db.query(DashboardMetrics).first()
+    if not metrics:
+        metrics = DashboardMetrics(id=1)
+        db.add(metrics)
+        db.commit()
+        db.refresh(metrics)
     t1 = time.perf_counter()
 
     now = datetime.utcnow()

@@ -32,6 +32,8 @@ def test_get_files_metric_empty(db_session):
 
 
 def test_get_emails_metric(db_session):
+    initial_metrics = get_emails_metric(db_session)
+    
     db_session.add_all([
         EmailMetric(recipient="a@test.com", subject="Welcome"),
         EmailMetric(recipient="b@test.com", subject="Hi"),
@@ -40,7 +42,7 @@ def test_get_emails_metric(db_session):
     db_session.commit()
 
     result = get_emails_metric(db_session)
-    assert result["daily_count"] == 3
-    assert result["monthly_count"] == 3
+    assert result["daily_count"] == initial_metrics["daily_count"] + 3
+    assert result["monthly_count"] == initial_metrics["monthly_count"] + 3
     assert result["day_limit"] == 300
     assert result["month_limit"] == 3000

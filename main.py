@@ -26,13 +26,38 @@ from config import settings
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
-
-
-
-
-
+from contextlib import asynccontextmanager
+from database.session import engine
+from cache.redis import redis_client
+from sqlalchemy import text
 
 IS_PROD = settings.ENV == "production"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Warming up connections...")
+
+    try:
+        for _ in range(5):
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+        for _ in range(5):
+            redis_client.ping()
+
+        print("DB and Redis connections warmed up")
+    except Exception as e:
+        print(f"Warm-up failed: {e}")
+
+    yield
+
+    # shutdown cleanup
+    print("Shutting down connections...")
+    engine.dispose()
+    redis_client.close()
+    print("Connections closed")
+
 
 app = FastAPI(
     title="BADIA API",
@@ -45,10 +70,10 @@ app = FastAPI(
     license_info={
         "name": "Proprietary",
     },
-
     docs_url=None if IS_PROD else "/docs",
     redoc_url=None if IS_PROD else "/redoc",
     openapi_url=None if IS_PROD else "/openapi.json",
+    lifespan=lifespan,   # <-- this was missing
 )
 
 
@@ -64,14 +89,9 @@ if sentry_dsn and settings.ENV == "production":
     )
 
 
-
-
-
 # SlowAPI rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-
 
 
 @app.get("/")

@@ -5,7 +5,7 @@ from config import settings
 connect_args = {
     "init_command": "SET time_zone='+00:00'"
 }
-if settings.ENV == "production":
+if settings.DB_SSL:
     connect_args["ssl"] = {"ssl_mode": "VERIFY_IDENTITY"}
 
 engine = create_engine(
@@ -14,7 +14,7 @@ engine = create_engine(
     pool_size=20,
     max_overflow=20,
     pool_timeout=15,
-    pool_recycle=300,  
+    pool_recycle=300,
     connect_args=connect_args
 )
 
@@ -32,5 +32,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-        

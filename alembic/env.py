@@ -69,7 +69,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connect_args = {}
-    if settings.ENV == "production":
+    if settings.DB_SSL:
         connect_args["ssl"] = {"ssl_mode": "VERIFY_IDENTITY"}
 
     connectable = create_engine(
