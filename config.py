@@ -60,8 +60,16 @@ class Settings(BaseSettings):
 
     FRONTEND_ACCOUNT_URL: str
 
-    model_config = ConfigDict(env_file=".env", extra="ignore")
 
+    HESABE_MERCHANT_CODE: str
+    HESABE_ACCESS_CODE: str
+    HESABE_SECRET_KEY: str
+    HESABE_IV: str
+
+
+    model_config = ConfigDict(env_file=".env", extra="ignore")  
+
+    
     @property
     def database_url(self):
         password = quote_plus(self.DB_PASSWORD)
