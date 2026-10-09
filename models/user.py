@@ -22,9 +22,9 @@ class User(Base):
     phone = Column(String(20))
     is_active = Column(Boolean, nullable=False, server_default=text("1"), index=True)
     reviews = relationship("Review", back_populates="user")
-    payments = relationship("Payment", primaryjoin="User.id == Payment.user_id", foreign_keys="[Payment.user_id]", back_populates="user")
     current_plan = relationship("Plan", back_populates="users")
     requests = relationship("Request",back_populates="user", cascade="all, delete-orphan")
-
+    subscriptions = relationship("Subscription", back_populates="user")
+    payments = relationship("Payment", back_populates="user")
 
 
