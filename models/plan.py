@@ -14,7 +14,7 @@ class Plan(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     
-    users = relationship("User", back_populates="current_plan", passive_deletes=True)
+
     payments = relationship("Payment", back_populates="plan")
     subscriptions = relationship("Subscription", back_populates="plan")
 

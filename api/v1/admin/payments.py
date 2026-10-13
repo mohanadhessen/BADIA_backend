@@ -6,7 +6,7 @@ from api.rate_limiter import limiter
 from models.payment import Payment
 from crud.user import get_user_by_id
 from crud.plan import get_plan_by_id
-from crud.payment import create_payment, update_payment, admin_get_all_payments , get_payment_by_user_id, get_payments_by_user_email
+from crud.payment import create_payment_admin, admin_update_manual_payment, admin_get_all_payments 
 from email_service import send_plan_update_email , send_plan_cancelled_by_admin_email
 from schemas.payment import PaymentBase , PaymentUpdate, AdminPaymentResponse
 from crud.dashboard_metrics import refresh_payment_metrics
@@ -143,7 +143,7 @@ def update_payment_endpoint(
                 transaction_id=str(payment.id),
             )
 
-        elif payment.status in {"canceled", "rejected"}:
+        elif payment.status in {"canceled", "failed"}:
             background_tasks.add_task(
                 send_plan_cancelled_by_admin_email,
                 email=user.email,

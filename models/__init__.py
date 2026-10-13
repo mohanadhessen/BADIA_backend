@@ -8,3 +8,4 @@ from .email_metric import EmailMetric
 from .request import Request
 from .revoked_token import RevokedToken
 from .dashboard_metrics import DashboardMetrics
+from .subscription import Subscription

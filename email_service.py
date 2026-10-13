@@ -311,7 +311,7 @@ def send_plan_update_email(
           <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; font-family:monospace; color:#5a5a52; text-align:right; font-weight:600;">{transaction_id}</td>
         </tr>"""
 
-    html = f"""
+    html_body = f"""
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -429,7 +429,7 @@ def send_plan_update_email(
             "from": "BADIA <no-reply@badiaprojectmanagement.com>",
             "to": [email],
             "subject": f"Plan Updated — {plan_name} is now active",
-            "html": html,
+            "html": html_body,
         })
         _log_email(email, f"Plan Updated — {plan_name} is now active")
         return res
@@ -680,3 +680,323 @@ def send_contact_form_email(name: str, visitor_email: str, phone: str, message: 
 
 
 
+
+
+
+def send_plan_expiry_reminder_email(
+        
+        
+    email: str,
+    user_name: str,
+    plan_name: str,
+    expiry_date,
+    days_left: int = 3,
+):
+    user_name = html.escape(user_name)
+    plan_name = html.escape(plan_name)
+    expiry_str = (
+        expiry_date.strftime("%Y-%m-%d")
+        if hasattr(expiry_date, "strftime")
+        else html.escape(str(expiry_date))
+    )
+    day_label = "day" if days_left == 1 else "days"
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Subscription Expiring Soon - BADIA</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f0f0eb; font-family:Arial, sans-serif;">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f0eb; padding:40px 16px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+              style="max-width:580px; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #ddddd8;">
+
+              <!-- Header / Logo -->
+              <tr>
+                <td style="background-color:#0f1117; padding:32px 40px 28px; text-align:center;">
+                  <p style="margin:0; font-size:22px; font-weight:700; color:#ffffff; letter-spacing:3px; text-transform:uppercase;">BADIA</p>
+                  <p style="margin:6px 0 0; font-size:11px; color:#7a7a72; letter-spacing:1.5px; text-transform:uppercase;">Business Consulting &amp; Accounting</p>
+                </td>
+              </tr>
+
+              <!-- Status bar -->
+              <tr>
+                <td style="background-color:#fdf8ec; border-bottom:1px solid #e8e8e0; padding:20px 40px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding-right:14px; vertical-align:middle;">
+                        <div style="width:36px; height:36px; border-radius:50%; background-color:#fdf0d0; border:1.5px solid #d9a02b; text-align:center; line-height:36px; font-size:18px; font-weight:700; color:#a8740f;">!</div>
+                      </td>
+                      <td style="vertical-align:middle;">
+                        <p style="margin:0; font-size:14px; font-weight:700; color:#1a1a18;">Subscription Expiring Soon</p>
+                        <p style="margin:2px 0 0; font-size:12px; color:#7a7a72;">Your plan expires in {days_left} {day_label}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Body -->
+              <tr>
+                <td style="padding:32px 40px 28px;">
+
+                  <!-- Greeting -->
+                  <p style="margin:0 0 24px; font-size:15px; color:#3a3a36; line-height:1.7;">
+                    Dear <strong style="color:#1a1a18;">{user_name}</strong>,<br>
+                    This is a friendly reminder that your <strong style="color:#1a1a18;">{plan_name}</strong> subscription will expire in <strong style="color:#1a1a18;">{days_left} {day_label}</strong>, on <strong style="color:#1a1a18;">{expiry_str}</strong>.
+                  </p>
+
+                  <!-- Section label -->
+                  <p style="margin:0 0 14px; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#9a9a90;">Subscription Details</p>
+
+                  <!-- Details table -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-bottom:28px;">
+                    <tr>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72; width:40%;">Plan</td>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{plan_name}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Expiry Date</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#a8740f; font-weight:700; text-align:right;">{expiry_str}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Time Remaining</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{days_left} {day_label}</td>
+                    </tr>
+                  </table>
+
+                  <!-- Notice box -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                    <tr>
+                      <td style="background-color:#fdf8ec; border-left:3px solid #d9a02b; border-radius:0 4px 4px 0; padding:14px 18px;">
+                        <p style="margin:0; font-size:13px; color:#3a3a36; line-height:1.6;">
+                          To avoid any interruption to your services, please renew your plan <strong style="color:#1a1a18;">before {expiry_str}</strong>. Renewal is not automatic, so you will need to re-purchase your plan from your account.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- CTA -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="center">
+                        <a href="{FRONTEND_ACCOUNT_URL}" style="
+                            display: inline-block;
+                            padding: 12px 30px;
+                            background-color: #0f1117;
+                            color: #ffffff;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            font-weight: bold;
+                            font-size: 15px;
+                        ">
+                          Renew My Plan
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+
+              <!-- Footer -->
+              <tr>
+                <td style="background-color:#f5f5ee; border-top:1px solid #e8e8e0; padding:24px 40px; text-align:center;">
+                  <p style="margin:0 0 6px; font-size:12px; color:#9a9a90; line-height:1.7;">
+                    Need help? Contact us at <a href="mailto:support@badiaprojectmanagement.com" style="color:#5a5a52;">support@badiaprojectmanagement.com</a>
+                  </p>
+                  <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
+                    &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
+                    This email was sent to you because you hold an active BADIA account. Note: If you don't see our emails in your inbox, please check your spam or delete folder.
+                  </p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
+
+    </body>
+    </html>
+    """
+
+    subject = f"Your {plan_name} Plan Expires in {days_left} {day_label}"
+
+    try:
+        res = resend.Emails.send({
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
+            "to": [email],
+            "subject": subject,
+            "html": html_body,
+        })
+        _log_email(email, subject)
+        return res
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        return None
+
+    
+
+
+def send_plan_expiry_email(
+    email: str,
+    user_name: str,
+    plan_name: str,
+    expiry_date,
+):
+    user_name = html.escape(user_name)
+    plan_name = html.escape(plan_name)
+    expiry_str = (
+        expiry_date.strftime("%Y-%m-%d")
+        if hasattr(expiry_date, "strftime")
+        else html.escape(str(expiry_date))
+    )
+
+    html_body = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Subscription Expired - BADIA</title>
+    </head>
+    <body style="margin:0; padding:0; background-color:#f0f0eb; font-family:Arial, sans-serif;">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f0eb; padding:40px 16px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+              style="max-width:580px; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #ddddd8;">
+
+              <!-- Header / Logo -->
+              <tr>
+                <td style="background-color:#0f1117; padding:32px 40px 28px; text-align:center;">
+                  <p style="margin:0; font-size:22px; font-weight:700; color:#ffffff; letter-spacing:3px; text-transform:uppercase;">BADIA</p>
+                  <p style="margin:6px 0 0; font-size:11px; color:#7a7a72; letter-spacing:1.5px; text-transform:uppercase;">Business Consulting &amp; Accounting</p>
+                </td>
+              </tr>
+
+              <!-- Status bar -->
+              <tr>
+                <td style="background-color:#fdf2f2; border-bottom:1px solid #e8e8e0; padding:20px 40px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding-right:14px; vertical-align:middle;">
+                        <div style="width:36px; height:36px; border-radius:50%; background-color:#fce8e8; border:1.5px solid #c94040; text-align:center; line-height:34px; font-size:18px; font-weight:700; color:#a32d2d;">&#10005;</div>
+                      </td>
+                      <td style="vertical-align:middle;">
+                        <p style="margin:0; font-size:14px; font-weight:700; color:#1a1a18;">Subscription Expired</p>
+                        <p style="margin:2px 0 0; font-size:12px; color:#7a7a72;">Your plan has reached its end date</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Body -->
+              <tr>
+                <td style="padding:32px 40px 28px;">
+
+                  <!-- Greeting -->
+                  <p style="margin:0 0 24px; font-size:15px; color:#3a3a36; line-height:1.7;">
+                    Dear <strong style="color:#1a1a18;">{user_name}</strong>,<br>
+                    Your <strong style="color:#1a1a18;">{plan_name}</strong> subscription has expired as of <strong style="color:#1a1a18;">{expiry_str}</strong>.
+                  </p>
+
+                  <!-- Section label -->
+                  <p style="margin:0 0 14px; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#9a9a90;">Subscription Details</p>
+
+                  <!-- Details table -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-bottom:28px;">
+                    <tr>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72; width:40%;">Plan</td>
+                      <td style="padding:13px 0; border-top:1px solid #e8e8e0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{plan_name}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Status</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#a32d2d; font-weight:700; text-align:right;">Expired</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:#7a7a72;">Expired On</td>
+                      <td style="padding:13px 0; border-bottom:1px solid #e8e8e0; font-size:13px; color:#1a1a18; font-weight:600; text-align:right;">{expiry_str}</td>
+                    </tr>
+                  </table>
+
+                  <!-- Notice box -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                    <tr>
+                      <td style="background-color:#fdf2f2; border-left:3px solid #a32d2d; border-radius:0 4px 4px 0; padding:14px 18px;">
+                        <p style="margin:0; font-size:13px; color:#3a3a36; line-height:1.6;">
+                          To continue using our services, please purchase a plan again from your account. If you have any questions, please reach out at
+                          <a href="mailto:support@badiaprojectmanagement.com" style="color:#a32d2d; font-weight:600;">support@badiaprojectmanagement.com</a>.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- CTA -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="center">
+                        <a href="{FRONTEND_ACCOUNT_URL}" style="
+                            display: inline-block;
+                            padding: 12px 30px;
+                            background-color: #0f1117;
+                            color: #ffffff;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            font-weight: bold;
+                            font-size: 15px;
+                        ">
+                          Renew My Plan
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+
+              <!-- Footer -->
+              <tr>
+                <td style="background-color:#f5f5ee; border-top:1px solid #e8e8e0; padding:24px 40px; text-align:center;">
+                  <p style="margin:0 0 6px; font-size:12px; color:#9a9a90; line-height:1.7;">
+                    Need help? Contact us at <a href="mailto:support@badiaprojectmanagement.com" style="color:#5a5a52;">support@badiaprojectmanagement.com</a>
+                  </p>
+                  <p style="margin:10px 0 0; font-size:12px; color:#9a9a90; line-height:1.7;">
+                    &copy; 2026 BADIA &mdash; Business Consulting &amp; Accounting<br>
+                    This email was sent to you because you hold an active BADIA account. Note: If you don't see our emails in your inbox, please check your spam or delete folder.
+                  </p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
+
+    </body>
+    </html>
+    """
+
+    subject = f"Your {plan_name} Subscription Has Expired"
+
+    try:
+        res = resend.Emails.send({
+            "from": "BADIA <no-reply@badiaprojectmanagement.com>",
+            "to": [email],
+            "subject": subject,
+            "html": html_body,
+        })
+        _log_email(email, subject)
+        return res
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        return None  

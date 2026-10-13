@@ -136,6 +136,7 @@ def admin_get_all_requests(
     from sqlalchemy import or_
     from models.user import User
     from models.plan import Plan
+    from models.subscription import Subscription
     offset = (page - 1) * limit
 
     query = db.query(Request).join(User, Request.user_id == User.id)
@@ -145,7 +146,14 @@ def admin_get_all_requests(
     if status:
         query = query.filter(Request.status == status)
     if plan:
-        query = query.join(Plan, User.current_plan_id == Plan.id).filter(Plan.name == plan)
+        query = (
+            query.join(
+                Subscription,
+                User.current_subscription_id == Subscription.id,
+            )
+            .join(Plan, Subscription.plan_id == Plan.id)
+            .filter(Plan.name == plan)
+        )
         
     if q:
         search_filters = [

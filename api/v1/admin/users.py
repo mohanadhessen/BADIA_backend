@@ -291,8 +291,16 @@ def search_user_by_email(
             "avatar_url": user.avatar_url,
             "is_active": user.is_active,
             "is_email_verified": user.is_email_verified,
-            "current_plan_id": user.current_plan_id,
-            "subscription_end_date": user.subscription_end_date,
+            "current_plan_id": (
+                user.current_subscription.plan_id
+                if user.current_subscription is not None
+                else None
+            ),
+            "subscription_end_date": (
+                user.current_subscription.end_date
+                if user.current_subscription is not None
+                else None
+            ),
             "created_at": user.created_at,
         },
         "requests": formatted_requests,

@@ -22,6 +22,15 @@ from api.v1.admin.storage import router as admin_storage_router
 from api.v1.admin.payments import router as admin_notifications_router
 from api.v1.admin.dashboard import router as admin_dashboard_router
 
+
+
+from api.v1.payment.create import router as payment_router
+from api.v1.payment.failure import router as payment_failure_router
+from api.v1.payment.success import router as payment_success_router
+from api.v1.payment.webhook import router as payment_webhook_router
+
+
+
 from config import settings
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -134,3 +143,12 @@ app.include_router(admin_requests_router, prefix="/api/v1/admin")
 app.include_router(admin_plans_router, prefix="/api/v1/admin")
 app.include_router(admin_storage_router, prefix="/api/v1/admin")
 app.include_router(admin_notifications_router, prefix="/api/v1/admin")
+
+
+
+
+
+app.include_router(payment_router, prefix="/api/v1/payment")
+app.include_router(payment_failure_router, prefix="/api/v1/payment")
+app.include_router(payment_success_router, prefix="/api/v1/payment")
+app.include_router(payment_webhook_router, prefix="/api/v1/webhook")
