@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     HESABE_IV: str = ""
 
 
+    HESABE_CHECKOUT_URL: str = ""
+
+    HESABE_WEBHOOKURL :str = ""
+
+
+
     model_config = ConfigDict(env_file=".env", extra="ignore")  
 
     

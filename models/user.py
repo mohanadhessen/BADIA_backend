@@ -1,12 +1,16 @@
 from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP, Enum, Text, ForeignKey, func, text
 from sqlalchemy.orm import relationship
 from database.base import Base
-
+import uuid
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    hashId = Column(String(36),default=lambda: str(uuid.uuid4()),
+    unique=True,
+    nullable=False,
+)
     first_name = Column(String(150), nullable=True)
     last_name = Column(String(150), nullable=True)
     company_name = Column(String(150), nullable=False)

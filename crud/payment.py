@@ -15,14 +15,15 @@ from crud.subscriptions import create_subscription
 
 
 
-
-
-
-
-
-
 # todo create these two functions : get_payment_by_user_id, get_payments_by_user_email
 
+
+
+def get_pending_payments(db: Session):
+    return db.query(Payment).filter(
+        Payment.status == "pending",
+        Payment.source == "paymentgateway",
+    )
 
 
 
@@ -72,24 +73,35 @@ def create_payment_gateaway(db: Session, data: PaymentCheckoutRequest, billing_c
     return payment
 
 
-def mark_payment_as_paid(db: Session, payment_id: int , gateway_token: str):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+def mark_payment_as_paid(db: Session, gateway_token: str, commit: bool = True):
+    payment = db.query(Payment).filter(Payment.gateway_token == gateway_token).first()
     if not payment:
         raise ValueError("Payment not found")
 
-    setattr(payment, "gateway_token", gateway_token)
 
     payment.status = "paid"
+    if commit:
+        db.commit()
+        db.refresh(payment)
+        refresh_payment_metrics(db)
+    else:
+        db.flush()
+
+    return payment
+
+
+def mark_payment_as_failed(db: Session, gateway_token: str):
+    payment = db.query(Payment).filter(Payment.gateway_token == gateway_token).first()
+    if not payment:
+        raise ValueError("Payment not found")
+
+
+    payment.status = "failed"# type: ignore
     db.commit()
     db.refresh(payment)
     refresh_payment_metrics(db)
 
     return payment
-
-
-def mark_payment_as_failed(db: Session):
-    db.query(Payment).filter(Payment.status == "pending").update({Payment.status : "failed"},synchronize_session=False)
-    db.commit()
 
 
 
@@ -127,12 +139,12 @@ def create_payment_admin(db: Session, data: PaymentBase, billing_cycle: str):
     end_date = date.today() + timedelta(days=365 if billing_cycle == "yearly" else 30)
     create_subscription(
         db=db,
-        user_id=user.id,
+        user_id=user.id,  # type: ignore
         plan_id=plan.id,
         payment_id=payment.id,
         end_date=end_date,
     )
-    refresh_payment_metrics(db)
+    refresh_payment_metrics(db)  # type: ignore
 
     return payment
 

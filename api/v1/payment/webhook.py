@@ -5,9 +5,9 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request , HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
-
 from config import settings
-from crud.payment import get_payment_by_hash, mark_payment_as_paid
+from crud.payment import get_payment_by_hash, mark_payment_as_failed, mark_payment_as_paid
+from crud.dashboard_metrics import refresh_payment_metrics
 from crud.subscriptions import create_subscription
 from database.session import get_db
 from email_service import send_plan_update_email
@@ -37,94 +37,103 @@ async def hesabe_hook(
     db: Session = Depends(get_db),
 ):
     try:
-        payload = HesabeWebhook.model_validate_json(await request.body())
-    except ValidationError:
-        log.warning("Ignoring malformed Hesabe webhook")
-        return {"ok": True}
+        try:
+            payload = HesabeWebhook.model_validate_json(await request.body())
+        except ValidationError:
+            db.rollback()
+            log.warning("Ignoring malformed Hesabe webhook")
+            return {"ok": True}
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"https://sandbox.hesabe.com/api/transaction/{payload.token}",
-            headers={"accessCode": settings.HESABE_ACCESS_CODE, "Accept": "application/json"},
-        )
-    enquiry = response.json()["data"]
-
-
-# Enquiry response:
-# {
-#     'token': '84221717917899209868458887603',
-#     'amount': '917.000',
-#     'reference_number': '49325186147940cb8d7405a36e03a4c4',
-#     'status': 'SUCCESSFUL',
-#     'TransactionID': '628510004414039',
-#     'Id': 194218,
-#     'PaymentID': '100628510000004202',
-#     'Terminal': '570401',
-#     'TrackID': '377135',
-#     'payment_type': 'KNET',
-#     'service_type': 'Payment Gateway',
-#     'customerName': None,
-#     'customerEmail': 'mohanadhessen@gmail.com',
-#     'customerMobile': None,
-#     'customerCardType': '-NA-',
-#     'customerCard': '-NA-',
-#     'datetime': '2026-10-12 10:25:21',
-# }
+        RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
     
+        async with httpx.AsyncClient(timeout=30) as client:
+            for _ in range(3):
+                try:
+                    response = await client.get(
+                        f"https://sandbox.hesabe.com/api/transaction/{payload.token}",
+                        headers={"accessCode": settings.HESABE_ACCESS_CODE, "Accept": "application/json"},
+                    )
+                except (httpx.TimeoutException, httpx.NetworkError):
+                    continue
+                if response.status_code in RETRYABLE_STATUS_CODES:
+                    continue
+                if not response.is_success:
+                    raise HTTPException(status_code=502, detail=f"Hesabe returned {response.status_code}")
+                break
+            else:
+                raise HTTPException(status_code=503, detail="Hesabe enquiry unavailable after retries")
     
-  
-        
+        enquiry = response.json()["data"]
 
 
+        payment = get_payment_by_hash(db, enquiry["reference_number"])
+        if payment is None:
+            raise ValueError("Payment not found")
+
+        if enquiry.get("reference_number") != payment.payment_hash:
+            raise HTTPException(status_code=400, detail="Hesabe payment reference does not match")
+        if enquiry.get("token") != payment.gateway_token:
+            raise HTTPException(status_code=400, detail="Hesabe transaction token does not match")
+        if Decimal(str(enquiry.get("amount"))) != payment.amount:
+            raise HTTPException(status_code=400, detail="Hesabe transaction amount does not match")
+
+        if payment.status == "paid":
+            log.info("Ignoring duplicate successful webhook for payment %s", payment.payment_hash)
+            return {"ok": True}
+
+        if enquiry["status"] != "SUCCESSFUL":
+            if enquiry["status"] in {"FAILED", "DECLINED"}:
+                mark_payment_as_failed(db, payment.gateway_token)  # type: ignore
+            else:
+                log.info("Hesabe payment %s is not final: %s", payment.payment_hash, enquiry["status"])
+            return {"ok": True}
 
 
-    payment = get_payment_by_hash(db, enquiry["reference_number"])
-    if payment is None:
-        raise ValueError("Payment not found")
-
-    if enquiry["status"] != "SUCCESSFUL":
-      payment.status = "failed"
-      db.commit()
-      raise HTTPException(
-        status_code=400,
-        detail=f"Payment failed: {enquiry['status']}",
-    )
-        
-    
-
-    user = db.get(User, payment.user_id)
-    if user.current_subscription_id:
         carry = 0
-        current_subscription = db.get(Subscription , user.current_subscription_id)
-        carry = max(0,(current_subscription.end_date - date.today()).days)
-        current_subscription.status = "canceled"
+
+        user = db.get(User, payment.user_id)
+        if user.current_subscription_id :  # type: ignore
+            current_subscription = db.get(Subscription, user.current_subscription_id)  # type: ignore
+            current_subscription.status = "canceled"  # type: ignore
+            if current_subscription.plan_id == payment.plan_id:# type: ignore
+                carry = max(0, (current_subscription.end_date - date.today()).days)  # type: ignore
 
 
 
-    
-    mark_payment_as_paid(db, payment.id, payment.gateway_token or "")
-    end_date = date.today() + timedelta(
-        days=365 + carry if payment.billing_cycle == "yearly" else 30 + carry
-    )
-    subscription = create_subscription(
-        db=db,
-        user_id=payment.user_id,
-        plan_id=payment.plan_id,
-        payment_id=payment.id,
-        end_date=end_date,
-    )
-    plan = db.get(Plan, subscription.plan_id)
 
-    amount = plan.price_yearly if payment.billing_cycle == "yearly" else plan.price_monthly
+        end_date = date.today() + timedelta(
+            days=365 + carry if payment.billing_cycle == "yearly" else 30 + carry  # type: ignore
+        )
 
-    background_tasks.add_task(
-    send_plan_update_email,
-    user.email,
-    user.first_name,
-    plan.name,
-    amount,
-    payment.billing_cycle,
-    payment.gateway_token,
-)
-   
-    return {"ok": True}
+
+        subscription = create_subscription(
+            db=db,
+            user_id=payment.user_id,  # type: ignore
+            plan_id=payment.plan_id,  # type: ignore
+            payment_id=payment.id,  # type: ignore
+            end_date=end_date,
+            commit=False,
+        )
+        plan = db.get(Plan, subscription.plan_id)
+
+        amount = plan.price_yearly if payment.billing_cycle == "yearly" else plan.price_monthly  # type: ignore
+
+        mark_payment_as_paid(db, payment.gateway_token, commit=False)  # type: ignore
+        db.flush()
+        refresh_payment_metrics(db)
+
+        background_tasks.add_task(
+            send_plan_update_email,
+            user.email,  # type: ignore
+            user.first_name,  # type: ignore
+            plan.name,  # type: ignore
+            amount,
+            payment.billing_cycle,  # type: ignore
+            payment.gateway_token,  # type: ignore
+        )
+
+
+        return {"ok": True}
+    except Exception:
+        db.rollback()
+        raise

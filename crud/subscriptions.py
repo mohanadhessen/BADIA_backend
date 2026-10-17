@@ -11,7 +11,15 @@ class SubscriptionStatus(StrEnum):
     EXPIRED = "expired"
     CANCELED = "canceled"
 
-def create_subscription(db:Session, user_id:int , plan_id:int , payment_id:int ,end_date :date,status:SubscriptionStatus = SubscriptionStatus.ACTIVE ) :
+def create_subscription(
+    db: Session,
+    user_id: int,
+    plan_id: int,
+    payment_id: int,
+    end_date: date,
+    status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    commit: bool = True,
+):
     
     subscription = Subscription(
         user_id=user_id,
@@ -27,8 +35,9 @@ def create_subscription(db:Session, user_id:int , plan_id:int , payment_id:int ,
     if user is not None:
         user.current_subscription_id = subscription.id
 
-    db.commit()
-    db.refresh(subscription)
+    if commit:
+        db.commit()
+        db.refresh(subscription)
 
     return subscription
 

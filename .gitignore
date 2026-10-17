@@ -36,3 +36,5 @@ logs/
 # keep these
 !README.md
 !requirements.txt
+!PAYMENT_ROLLOUT_NOTES.md
+!PAYMENT_CODE_CHANGELOG.md
