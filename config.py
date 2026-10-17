@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator , ConfigDict
+from pydantic import Field, field_validator, ConfigDict
 from urllib.parse import quote_plus
 from typing import List, Optional, Union
 import json
@@ -7,7 +7,7 @@ import json
 
 class Settings(BaseSettings):
     ENV: str = "production"
-    cors_origins: Union[List[str], str]
+    cors_origins: Union[List[str], str] = Field(default_factory=list)
     cors_regex: Optional[str] = None
     
     COOKIE_DOMAIN: str = None
@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     CSRF_COOKIE_NAME: str = "csrf_token"
     ROLE_COOKIE_NAME: str = "badia_role"
 
-    REDIS_URL : str
+    REDIS_URL: str = ""
 
 
 
-    SENTRY_DSN: str
+    SENTRY_DSN: str = ""
 
 
     @field_validator("cors_origins", mode="before")
@@ -44,24 +44,38 @@ class Settings(BaseSettings):
     DB_PORT: int = 3306
     DB_SSL: bool = False
 
-    GOOGLE_CLIENT_ID: str
-    GOOGLE_CLIENT_SECRET: str
-    GOOGLE_REDIRECT_URL: str
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URL: str = ""
 
-    TOKEN_SECRET_KEY: str
-    ALGORITHM : str
-    ACCESS_TOKEN_EXPIRE_MINUTES : int
+    TOKEN_SECRET_KEY: str = ""
+    ALGORITHM: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    RESEND_API_KEY: str
-    R2_ENDPOINT: str
-    R2_BUCKET: str
-    R2_ACCESS_KEY_ID: str
-    R2_SECRET_ACCESS_KEY: str
+    RESEND_API_KEY: str = ""
+    R2_ENDPOINT: str = ""
+    R2_BUCKET: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
 
     FRONTEND_ACCOUNT_URL: str
 
-    model_config = ConfigDict(env_file=".env", extra="ignore")
 
+    HESABE_MERCHANT_CODE: str = ""
+    HESABE_ACCESS_CODE: str = ""
+    HESABE_SECRET_KEY: str = ""
+    HESABE_IV: str = ""
+
+
+    HESABE_CHECKOUT_URL: str = ""
+
+    HESABE_WEBHOOKURL :str = ""
+
+
+
+    model_config = ConfigDict(env_file=".env", extra="ignore")  
+
+    
     @property
     def database_url(self):
         password = quote_plus(self.DB_PASSWORD)

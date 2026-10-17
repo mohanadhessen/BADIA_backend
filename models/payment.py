@@ -1,32 +1,26 @@
-from sqlalchemy import Column, Integer, ForeignKey, Numeric, Enum, TIMESTAMP, func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, ForeignKey, Numeric, Enum, TIMESTAMP, func , String
+from sqlalchemy.orm import relationship ,Mapped, mapped_column
 from database.base import Base
-
+import uuid
 
 
 class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False, index=True)
-    plan_id = Column(Integer, nullable=False, index=True)
+    payment_hash = Column(String(64), nullable=False, unique=True, default=lambda: uuid.uuid4().hex)
+    user_id = Column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
+    plan_id = Column(ForeignKey("plans.id", ondelete="SET NULL"), nullable=True, index=True)
     amount = Column(Numeric(10, 2), nullable=False)
-    billing_cycle = Column(
-        Enum("monthly", "yearly", name="billing_cycle"),
-        nullable=False,
-        index=True
-    )
+    billing_cycle = Column(Enum("monthly", "yearly", name="billing_cycle"),nullable=False,index=True)
     status = Column(
-    Enum("paid", "rejected", "canceled", name="payment_status"),
-    nullable=False,
-    index=True
-)
-
-    start_date = Column(TIMESTAMP, nullable=False)
-    end_date = Column(TIMESTAMP, nullable=False)
+    Enum("pending", "paid", "failed", name="payment_status" ),nullable=False,index=True , default="pending")
+    gateway_token = Column(String(255), nullable=True, index=True)
+    source = Column(Enum("manual", "paymentgateway", name="payment_source"), nullable=False, index=True)
+    
 
     created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
-    user = relationship("User", primaryjoin="Payment.user_id == User.id", foreign_keys=[user_id], back_populates="payments")
-    plan = relationship("Plan", primaryjoin="Payment.plan_id == Plan.id", foreign_keys=[plan_id], back_populates="payments")
+    user = relationship("User", back_populates="payments") 
+    plan = relationship("Plan", back_populates="payments")

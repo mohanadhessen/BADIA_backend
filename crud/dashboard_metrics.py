@@ -7,6 +7,7 @@ from models.payment import Payment
 from models.review import Review
 from models.request import Request
 from models.plan import Plan
+from models.subscription import Subscription
 from datetime import datetime
 
 import time
@@ -32,10 +33,10 @@ def get_dashboard_metrics(db: Session):
     t2 = time.perf_counter()
     live_row = db.execute(
         select(
-            func.sum(case((Payment.start_date >= month_start, 1), else_=0)).label("payments_this_month"),
+            func.sum(case((Payment.created_at >= month_start, 1), else_=0)).label("payments_this_month"),
             func.sum(
                 case(
-                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    (and_(Payment.status == "paid", Payment.created_at >= month_start), Payment.amount),
                     else_=0,
                 )
             ).label("revenue_this_month"),
@@ -97,10 +98,11 @@ def refresh_user_metrics(db: Session):
 
     plan_rows = db.execute(
         select(
-            User.current_plan_id.label("plan_id"),
+            Subscription.plan_id.label("plan_id"),
             func.count(User.id).label("count"),
         )
-        .group_by(User.current_plan_id)
+        .outerjoin(Subscription, User.current_subscription_id == Subscription.id)
+        .group_by(Subscription.plan_id)
     ).all()
 
     plan_names = {
@@ -187,19 +189,19 @@ def refresh_payment_metrics(db: Session):
         select(
             func.count(Payment.id).label("total_payments"),
             func.sum(case((Payment.status == "paid", 1), else_=0)).label("paid_payments"),
-            func.sum(case((Payment.status == "rejected", 1), else_=0)).label("rejected_payments"),
+            func.sum(case((Payment.status == "failed", 1), else_=0)).label("rejected_payments"),
             func.sum(case((Payment.status == "canceled", 1), else_=0)).label("canceled_payments"),
             func.sum(case((Payment.billing_cycle == "monthly", 1), else_=0)).label("monthly_payments"),
             func.sum(case((Payment.billing_cycle == "yearly", 1), else_=0)).label("yearly_payments"),
             func.sum(
-                case((Payment.start_date >= month_start, 1), else_=0)
+                case((Payment.created_at >= month_start, 1), else_=0)
             ).label("payments_this_month"),
             func.sum(
                 case((Payment.status == "paid", Payment.amount), else_=0)
             ).label("total_revenue"),
             func.sum(
                 case(
-                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    (and_(Payment.status == "paid", Payment.created_at >= month_start), Payment.amount),
                     else_=0,
                 )
             ).label("revenue_this_month"),
@@ -233,10 +235,10 @@ def get_this_month_payment_stats(db: Session):
 
     row = db.execute(
         select(
-            func.sum(case((Payment.start_date >= month_start, 1), else_=0)).label("payments_this_month"),
+            func.sum(case((Payment.created_at >= month_start, 1), else_=0)).label("payments_this_month"),
             func.sum(
                 case(
-                    (and_(Payment.status == "paid", Payment.start_date >= month_start), Payment.amount),
+                    (and_(Payment.status == "paid", Payment.created_at >= month_start), Payment.amount),
                     else_=0,
                 )
             ).label("revenue_this_month"),

@@ -94,10 +94,6 @@ def verify_refresh_token(token: str) -> dict:
 
 
 
-
-
-
-
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str, role: str = "") -> None:
     cookie_domain = settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None
     common = dict(

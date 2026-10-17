@@ -12,7 +12,8 @@ from cache.etags import make_etag , check_etag
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from crud.dashboard_metrics import refresh_user_metrics
-
+from models.subscription import Subscription
+from models.plan import Plan
 
 router = APIRouter(tags=["Users"])
 
@@ -27,27 +28,47 @@ def get_user_profile(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
-    minimal: bool = False
+    db: Session = Depends(get_db)
 ):
 
-    if minimal:
-        return {
-            "status": "logged_in"
-        }
-    
+
     version = get_user_version(current_user.id)
     if version == 0:
         bump_user_version(current_user.id)
         version = 1
     
-    etag_source = f"{version}_{current_user.role}_{current_user.is_email_verified}_{current_user.updated_at}"
+    sub = None
+    if current_user.current_subscription_id:
+        current_subscription = db.query(Subscription).filter(Subscription.id == current_user.current_subscription_id).first()
+        if current_subscription:
+            plan = db.query(Plan).filter(Plan.id == current_subscription.plan_id).first()
+            sub = {
+                "start_date": current_subscription.start_date,
+                "end_date": current_subscription.end_date,
+                "status": current_subscription.status,
+                "plan": {
+                    "id": plan.id,
+                    "name": plan.name,
+                    "price_monthly": plan.price_monthly,
+                    "price_yearly": plan.price_yearly,
+                    "plan_details": plan.plan_details,
+                } if plan else None,
+            }
+
+    etag_source = (
+        f"{version}_{current_user.role}_{current_user.is_email_verified}_"
+        f"{current_user.updated_at}_{current_user.current_subscription_id}_"
+        f"{sub['status'] if sub else None}_{sub['end_date'] if sub else None}"
+    )
     etag = make_etag(etag_source)
     if check_etag(request, response, etag):
         return []
+
     data = {
         "status": "success",
         "user_info": {
             "id": current_user.id,
+            "hashId": current_user.hashId,
             "email": current_user.email,
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
@@ -57,11 +78,13 @@ def get_user_profile(
             "auth_provider": current_user.auth_provider,
             "role": current_user.role,
             "created_at": current_user.created_at,
-            "is_email_verified": current_user.is_email_verified
+            "is_email_verified": current_user.is_email_verified,
+            "current_subscription": sub
         }
     }
     
     return data
+
 
 
 @router.patch("/me")
@@ -244,4 +267,4 @@ def create_user_by_admin(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error during user creation: {str(e)}",
-        )
+        )
