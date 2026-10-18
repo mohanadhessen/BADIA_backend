@@ -9,6 +9,7 @@ on:
 jobs:
   run-jobs:
     runs-on: ubuntu-latest
+    environment: badia_env
     timeout-minutes: 30
     env:
       ENV: production
