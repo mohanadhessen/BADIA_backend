@@ -22,7 +22,7 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       FRONTEND_ACCOUNT_URL: ${{ secrets.FRONTEND_ACCOUNT_URL }}
       HESABE_ACCESS_CODE: ${{ secrets.HESABE_ACCESS_CODE }}
-
+      COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN }}
 
     steps:
       - name: Checkout repository
