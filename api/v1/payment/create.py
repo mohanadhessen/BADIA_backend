@@ -57,7 +57,7 @@ def create_checkout(merchant_code: str, amount: Decimal, access_code: str, secre
         "webhookUrl": settings.HESABE_WEBHOOKURL,
         "email": customer_email,
     }
-
+    print(payload)
 
     encrypted = HesabeCrypt.encrypt(json.dumps(payload),secret_key,iv,)
 
