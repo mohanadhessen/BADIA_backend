@@ -62,7 +62,17 @@ for pending_payment in pending_payments:
                 headers={"accessCode": settings.HESABE_ACCESS_CODE, "Accept": "application/json"},
                 timeout=30,
             )
+            
+            if response.status_code == 404:
+                logger.warning(
+                    "Payment %s not found in Hesabe; marking as failed", pending_payment.id
+                )
+                mark_payment_as_failed(db, pending_payment.gateway_token)
+                break
+
+
             response.raise_for_status()
+
             data = response.json()["data"]
 
             if data.get("reference_number") != pending_payment.payment_hash:
@@ -126,9 +136,11 @@ for pending_payment in pending_payments:
                 db.flush()
                 refresh_payment_metrics(db)
                 email_args = email_args_after_commit
+                logger.info("Payment %s marked as paid", pending_payment.id)
 
             elif data["status"] in {"FAILED", "DECLINED"}:
                 mark_payment_as_failed(db, data["token"])
+                logger.info("Payment %s marked as failed", pending_payment.id)
             else:
                 db.rollback()
 
@@ -137,6 +149,7 @@ for pending_payment in pending_payments:
 
         except Exception as e:
             db.rollback() 
+
             logger.exception( "Payment %s sync attempt %d/3 failed", pending_payment.id,  attempt + 1,    )
             if attempt < 2:
                 time.sleep(60 * (2 ** attempt))
