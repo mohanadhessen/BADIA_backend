@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     HESABE_IV: str = ""
 
 
-    HESABE_CHECKOUT_URL: str = ""
+    HESABE_BASE_URL: str = ""
 
     HESABE_WEBHOOKURL :str = ""
 
