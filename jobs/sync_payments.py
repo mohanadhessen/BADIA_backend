@@ -58,7 +58,7 @@ for pending_payment in pending_payments:
     for attempt in range(3):
         try:
             response = httpx.get(
-                f"https://sandbox.hesabe.com/api/transaction/{pending_payment.gateway_token}",
+                f"{settings.HESABE_BASE_URL}/api/transaction/{pending_payment.gateway_token}",
                 headers={"accessCode": settings.HESABE_ACCESS_CODE, "Accept": "application/json"},
                 timeout=30,
             )

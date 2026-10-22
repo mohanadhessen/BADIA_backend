@@ -50,7 +50,7 @@ async def hesabe_hook(
             for _ in range(3):
                 try:
                     response = await client.get(
-                        f"https://sandbox.hesabe.com/api/transaction/{payload.token}",
+                        f"{settings.HESABE_BASE_URL}/api/transaction/{payload.token}",
                         headers={"accessCode": settings.HESABE_ACCESS_CODE, "Accept": "application/json"},
                     )
                 except (httpx.TimeoutException, httpx.NetworkError):

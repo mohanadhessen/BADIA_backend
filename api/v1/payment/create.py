@@ -11,14 +11,16 @@ from models.user import User
 from schemas.payment import PaymentCheckoutRequest, PaymentCheckoutResponse
 from crud.payment import create_payment_gateaway
 from crud.dashboard_metrics import refresh_payment_metrics
-from config import settings  # type: ignore[reportGeneralTypeIssues]  # pyright: ignore[reportGeneralTypeIssues]
+from config import settings 
 from models.payment import Payment
 from sqlalchemy.orm import Session
 
 
 
 
-PAYMENT_PAGE_URL = "https://sandbox.hesabe.com/payment"
+PAYMENT_PAGE_URL = settings.HESABE_BASE_URL + "/payment"
+
+
 log = logging.getLogger(__name__)
 
 
@@ -63,7 +65,7 @@ def create_checkout(merchant_code: str, amount: Decimal, access_code: str, secre
 
     for _ in range(retry_attempts):
         try:
-            response = httpx.post(settings.HESABE_CHECKOUT_URL,data={"data": encrypted},headers={"accessCode": access_code, "Accept": "application/json"}, timeout=30, )
+            response = httpx.post(settings.HESABE_BASE_URL + "/checkout",data={"data": encrypted},headers={"accessCode": access_code, "Accept": "application/json"}, timeout=30, )
         except (httpx.TimeoutException, httpx.NetworkError):
             continue
         if response.status_code in RETRYABLE_STATUS_CODES:
