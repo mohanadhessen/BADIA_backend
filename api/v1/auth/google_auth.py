@@ -9,7 +9,7 @@ import httpx
 from security import create_access_token, create_refresh_token , set_auth_cookies
 from api.rate_limiter import limiter
 import secrets
-from crud.dashboard_metrics import refresh_user_metrics
+
 
 
 

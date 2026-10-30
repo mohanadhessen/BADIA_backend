@@ -9,11 +9,10 @@ from database.session import get_db
 from api.dependencies import get_current_user
 from models.user import User
 from schemas.payment import PaymentCheckoutRequest, PaymentCheckoutResponse
-from crud.payment import create_payment_gateaway
-from crud.dashboard_metrics import refresh_payment_metrics
+from crud.payment import create_payment
 from config import settings 
 from models.payment import Payment
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 
@@ -21,30 +20,11 @@ from sqlalchemy.orm import Session
 PAYMENT_PAGE_URL = settings.HESABE_BASE_URL + "/payment"
 
 
-log = logging.getLogger(__name__)
-
-
-def _fail_checkout_without_gateway_token(db: Session, payment: Payment | None) -> None:
-    if payment is None:
-        db.rollback()
-        return
-
-    payment_id = payment.id
-    try:
-        db.rollback()
-        saved_payment = db.get(Payment, payment_id)
-        if saved_payment and saved_payment.status == "pending" and not saved_payment.gateway_token:
-            saved_payment.status = "failed"
-            db.commit()
-            refresh_payment_metrics(db)
-    except Exception as exc:
-        db.rollback()
-        log.exception("Could not mark checkout payment %s as failed", payment_id)
-        sentry_sdk.capture_exception(exc)
+ 
 
 
 
-def create_checkout(merchant_code: str, amount: Decimal, access_code: str, secret_key: str,iv: str,paymentType: int, customer_email: str, orderReferenceNumber: str,retry_attempts: int = 3) -> dict:
+async def create_checkout(merchant_code: str, amount: Decimal, access_code: str, secret_key: str,iv: str,paymentType: int, customer_email: str, orderReferenceNumber: str,retry_attempts: int = 3) -> dict:
     RETRYABLE_STATUS_CODES = {429, 502, 503, 504}
 
     payload = {
@@ -83,47 +63,39 @@ router = APIRouter(tags=["Payment"])
 @router.post("/checkout", response_model=PaymentCheckoutResponse,summary="Create a payment checkout", description=( "Creates a pending payment for the authenticated user and returns ""the payment gateway URL."),
     response_description="The URL to redirect the customer to",
 )
-def checkout(
-    data: PaymentCheckoutRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+async def checkout(data: PaymentCheckoutRequest,db: AsyncSession = Depends(get_db),current_user: User = Depends(get_current_user)):
     payment = None
     try:
-        payment = create_payment_gateaway(  db=db,  data=data, billing_cycle=data.billing_cycle, user_id=current_user.id,)   # type: ignore
-
-        result = create_checkout(
+        payment = await create_payment( db,  data, data.billing_cycle, current_user.id)           
+        result = await create_checkout(
             merchant_code=settings.HESABE_MERCHANT_CODE,
-            amount=payment.amount,  # type: ignore
+            amount=payment.amount,  
             access_code=settings.HESABE_ACCESS_CODE,
             secret_key=settings.HESABE_SECRET_KEY,
             iv=settings.HESABE_IV,
             paymentType=data.payment_type,
-            customer_email=current_user.email,  # type: ignore
-            orderReferenceNumber=payment.payment_hash,  # type: ignore
+            customer_email=current_user.email,  
+            orderReferenceNumber=payment.payment_hash, 
         )
 
         if ( result.get("status") is not True):
-            payment.status = "failed"  # type: ignore
-            db.commit()
+            payment.status = "failed" 
+            await db.commit()
             raise HTTPException( status_code=502,detail=f"Hesabe authentication failed: {result.get('message', 'Unknown error')}",)
 
         session_token = result["response"]["data"]
-        payment.gateway_token = result["token"]  # type: ignore
-        db.commit()
+        payment.gateway_token = result["token"] 
+        await db.commit()
 
         payment_url = f"{PAYMENT_PAGE_URL}?data={session_token}"
         return {"payment_url": payment_url}
     
     except HTTPException:
-        _fail_checkout_without_gateway_token(db, payment)
+
         raise
     
     except Exception as exc:
-        _fail_checkout_without_gateway_token(db, payment)
+        logging.exception("Unexpected error creating payment checkout")
         sentry_sdk.capture_exception(exc)
-        raise HTTPException(
-            status_code=500,
-            detail="An unexpected error occurred while creating the payment checkout.",
-        ) from exc
+        raise HTTPException(status_code=500,detail="An unexpected error occurred while creating the payment checkout.") from exc
 

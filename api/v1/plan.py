@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Response
 from starlette.status import HTTP_304_NOT_MODIFIED
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.session import get_db
 from crud.plan import get_all_plans
 from schemas.plan import PlanResponse
@@ -14,11 +14,7 @@ router = APIRouter(tags=["Plans"])
 
 @router.get("/", response_model=list[PlanResponse])
 @limiter.limit("60/minute")
-def list_plans(
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db)
-):
+async def list_plans(request: Request,response: Response,db: AsyncSession = Depends(get_db)):
     version = get_plans_version()
     if version == 0:
         bump_plans_version()
@@ -28,5 +24,5 @@ def list_plans(
     if check_etag(request, response, etag):
         return []
 
-    plans = get_all_plans(db)
+    plans = await get_all_plans(db)
     return plans

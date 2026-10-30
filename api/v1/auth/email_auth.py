@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.session import get_db
 from crud.user import get_user_by_email
 from email_tokens import (
@@ -22,21 +22,16 @@ router = APIRouter(tags=["email_services"])
 
 @router.post("/auth/request-verification")
 @limiter.limit("3/minute")
-def request_verification(
-    request: Request,
-    payload: VerificationRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    user = get_user_by_email(db, payload.email)
+async def request_verification(request: Request,payload: VerificationRequest,background_tasks: BackgroundTasks,db: AsyncSession = Depends(get_db)):
+    user = await get_user_by_email(db, payload.email)
     
-    # If the user doesn't exist, or they are already verified, do nothing quietly (security best practice)
+
     if not user or user.is_email_verified:
         return {"message": "If the account exists and is unverified, a link has been sent."}
         
-    # Generate token using your existing token utility
+
     token = create_email_verification_token(user.email) 
-    # Send the email
+
     background_tasks.add_task(send_verification_email, user.email, token) 
     
     return {"message": "If the account exists and is unverified, a link has been sent."}
@@ -45,7 +40,7 @@ def request_verification(
 
 @router.post("/auth/verify-email")
 @limiter.limit("10/minute")
-def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = Depends(get_db)):
+async def verify_email(request: Request, payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
     email = verify_email_token(payload.token)
 
     if not email:
@@ -54,7 +49,7 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
             detail="Token is invalid or expired"
         )
 
-    user = get_user_by_email(db, email)
+    user = await get_user_by_email(db, email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,9 +61,9 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
 
     try:
         user.is_email_verified = True
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         sentry_sdk.capture_exception(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -81,13 +76,8 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
 
 @router.post("/auth/forgot-password")
 @limiter.limit("3/minute")
-def forgot_password(
-    request: Request,
-    payload: ForgotPasswordRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    user = get_user_by_email(db, payload.email)
+async def forgot_password(request: Request,payload: ForgotPasswordRequest,background_tasks: BackgroundTasks,db: AsyncSession = Depends(get_db)):
+    user = await get_user_by_email(db, payload.email)
 
     if not user:
         raise HTTPException(
@@ -97,14 +87,13 @@ def forgot_password(
 
     token = create_password_reset_token(payload.email)
     background_tasks.add_task(send_password_reset_email, payload.email, token)
-
     return {"message": "Reset link sent successfully"}
 
 
 
 @router.post("/auth/reset-password")  
 @limiter.limit("10/minute")
-def reset_password(request: Request, payload: ResetPasswordRequest, db: Session = Depends(get_db)): 
+async def reset_password(request: Request, payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)): 
     email = verify_password_reset_token(payload.token)
     if not email:
         raise HTTPException(
@@ -112,7 +101,7 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
             detail="Token is invalid or expired"
         )
 
-    user = get_user_by_email(db, email)
+    user = await get_user_by_email(db, email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,9 +110,9 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
 
     try:
         user.password_hash = hash_password(payload.new_password)
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         sentry_sdk.capture_exception(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -135,11 +124,7 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
 
 @router.post("/contact")
 @limiter.limit("5/minute")
-def send_contact_form(
-    request: Request,
-    payload: ContactFormRequest,
-    background_tasks: BackgroundTasks
-):
+def send_contact_form(request: Request,payload: ContactFormRequest,background_tasks: BackgroundTasks):
     background_tasks.add_task(
         send_contact_form_email,
         name=payload.name,
@@ -147,4 +132,4 @@ def send_contact_form(
         phone=payload.phone,
         message=payload.message
     )
-    return {"message": "Contact message sent successfully"}
+    return {"message": "Contact message sent successfully"}

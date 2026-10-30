@@ -1,22 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from models.user import User
 from models.plan import Plan
-from crud.user import (
-    admin_get_all_users,
-    get_user_by_email,
-    admin_get_user_by_email,
-    get_users_plans_distribution,
-    admin_update_user_data,
-    get_user_by_id,
-    delete_user
-)
+from crud.user import get_user_by_email,admin_get_user_by_email,admin_update_user_data,get_user_by_id,delete_user
 from schemas.admin import AdminUserUpdateSchema
 from schemas.user import AdminUserSearchResponse
-from crud.dashboard_metrics import refresh_user_metrics 
+
 from cache.user import get_global_users_version, bump_global_users_version, bump_user_version
 from cache.etags import make_etag, check_etag
 
@@ -30,17 +22,7 @@ router = APIRouter(
 
 @router.get("/users")
 @limiter.limit("60/minute")
-def get_all_users(
-    request: Request,
-    response: Response,
-    page: int = 1,
-    limit: int = 25,
-    only_active: bool = False,
-    plan: str | None = None,
-    status: str | None = None,
-    q: str | None = None,
-    db: Session = Depends(get_db)
-):
+async def get_all_users(request: Request,response: Response,page: int = 1,limit: int = 25,only_active: bool = False,plan: str | None = None,status: str | None = None,q: str | None = None,db: AsyncSession = Depends(get_db)):
     version = get_global_users_version()
     etag_str = f"{version}:{page}:{limit}:{only_active}:{plan}:{status}:{q}"
     etag = make_etag(etag_str)

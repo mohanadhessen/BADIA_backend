@@ -1,40 +1,48 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from models import RevokedToken
 from security import hash_token
 
 
-def get_revoked_token(db: Session, token: str):
+async def get_revoked_token(db: AsyncSession, token: str):
     hashed_token = hash_token(token)
-    res = db.query(RevokedToken).filter(
-        RevokedToken.token == hashed_token
-    ).first()
-    if res:
-        return res
-    # Fallback to check raw token (for legacy revoked tokens already in the DB)
-    return db.query(RevokedToken).filter(
-        RevokedToken.token == token
-    ).first()
+    result = await db.execute( select(RevokedToken).where(RevokedToken.token == hashed_token))
+    revoked = result.scalar_one_or_none()
+    if revoked:
+        return revoked
+    # Fallback for legacy revoked tokens already in the DB
+    result = await db.execute( select(RevokedToken).where(RevokedToken.token == token))
+    return result.scalar_one_or_none()
 
 
-def create_revoked_token(db: Session, token: str):
+async def create_revoked_token(db: AsyncSession, token: str):
     hashed_token = hash_token(token)
     revoked = RevokedToken(token=hashed_token)
     db.add(revoked)
-    db.commit()
-    db.refresh(revoked)
+    await db.commit()
+    await db.refresh(revoked)
+
     return revoked
 
 
-def is_token_revoked(db: Session, token: str) -> bool:
+async def is_token_revoked(db: AsyncSession, token: str) -> bool:
     hashed_token = hash_token(token)
-    if db.query(RevokedToken).filter(
-        RevokedToken.token == hashed_token
-    ).first() is not None:
+
+    result = await db.execute(
+        select(RevokedToken.token).where(
+            RevokedToken.token == hashed_token
+        ).limit(1)
+    )
+
+    if result.scalar_one_or_none() is not None:
         return True
-    # Fallback to check raw token (for legacy revoked tokens already in the DB)
-    return db.query(RevokedToken).filter(
-        RevokedToken.token == token
-    ).first() is not None
 
+    # Fallback for legacy raw tokens
+    result = await db.execute(
+        select(RevokedToken.token).where(
+            RevokedToken.token == token
+        ).limit(1)
+    )
 
-
+    return result.scalar_one_or_none() is not None

@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from models.review import Review
 from crud.review import (
-    admin_get_all_review,
+    admin_get_all_reviews,
     delete_review,
     admin_set_review_publish_status,
     get_reviews_by_user_email,
 )
 from schemas.admin import ReviewPublishUpdate
 from schemas.review import AdminReviewResponse
-from crud.dashboard_metrics import refresh_review_metrics
 from cache.reviews import bump_global_reviews_version , bump_user_review_version, get_global_reviews_version
 from cache.etags import make_etag, check_etag
 
@@ -26,7 +25,7 @@ router = APIRouter(
 
 @router.get("/reviews")
 @limiter.limit("60/minute")
-def get_all_reviews(
+async def get_all_reviews(
     request: Request,
     response: Response,
     page: int = 1,
@@ -35,7 +34,7 @@ def get_all_reviews(
     status: str | None = None,
     rating: int | None = None,
     sort: str = "newest",
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     version = get_global_reviews_version()
     etag_str = f"{version}:{page}:{limit}:{q}:{status}:{rating}:{sort}"
@@ -44,7 +43,7 @@ def get_all_reviews(
     if check_etag(request, response, etag):
         return {}
 
-    data = admin_get_all_review(
+    data = await admin_get_all_reviews(
         db=db,
         page=page,
         limit=limit,
@@ -91,7 +90,7 @@ def delete_review_endpoint(
             detail="Review not found"
         )
 
-    refresh_review_metrics(db)
+
     return {"success": True, "review_id": review_id}
 
 
@@ -118,5 +117,5 @@ def set_review_publish_status(
     bump_user_review_version(review.user_id)
     bump_global_reviews_version()
 
-    refresh_review_metrics(db)
+
     return review

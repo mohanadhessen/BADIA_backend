@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks , Response
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import sentry_sdk
 from database.session import get_db
 from schemas.user import UserRegister
@@ -8,7 +8,7 @@ from security import hash_password , create_access_token , create_refresh_token 
 from api.rate_limiter import limiter
 from email_tokens import create_email_verification_token
 from email_service import send_verification_email
-from crud.dashboard_metrics import refresh_user_metrics
+
 
 
 
@@ -16,22 +16,13 @@ router = APIRouter(tags=["Auth"])
 
 @router.post("/auth/register_local", status_code=201)
 @limiter.limit("5/minute")
-def register_company(
-    request: Request,
-    response: Response,           
-    user_in: UserRegister,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    existing_user = get_user_by_email(db, user_in.email)
+async def register_company(request: Request,response: Response,user_in: UserRegister,background_tasks: BackgroundTasks,db: AsyncSession = Depends(get_db)):
+    existing_user = await get_user_by_email(db, user_in.email)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This email is already registered to a company.",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="This email is already registered to a company.",)
 
     try:
-        new_user = create_new_user(
+        new_user = await create_new_user(
             db=db,
             first_name=user_in.first_name,
             last_name=user_in.last_name,
@@ -50,12 +41,12 @@ def register_company(
         token_payload = {
             "sub": str(new_user.id),
         }
-        access_token      = create_access_token(data=token_payload)
+        access_token = create_access_token(data=token_payload)
         new_refresh_token = create_refresh_token(data=token_payload)
     
         set_auth_cookies(response, access_token, new_refresh_token, role=new_user.role)
     
-        refresh_user_metrics(db)
+
         return {
             "status": "success",
             "message": "Company account created",
@@ -64,7 +55,7 @@ def register_company(
         }
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         sentry_sdk.capture_exception(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

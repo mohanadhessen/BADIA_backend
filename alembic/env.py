@@ -72,8 +72,11 @@ def run_migrations_online() -> None:
     if settings.DB_SSL:
         connect_args["ssl"] = {"ssl_mode": "VERIFY_IDENTITY"}
 
+    # Alembic runs migrations synchronously, so use PyMySQL even though the
+    # application connects through the asyncmy driver.
+    migration_url = settings.database_url.replace("mysql+asyncmy://", "mysql+pymysql://", 1)
     connectable = create_engine(
-        settings.database_url,
+        migration_url,
         poolclass=pool.NullPool,
         connect_args=connect_args,
     )

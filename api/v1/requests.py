@@ -30,7 +30,7 @@ from schemas.FileResponse import FileResponse
 from api.rate_limiter import limiter
 from cache.requests import bump_user_requests_version, get_user_requests_version, bump_global_requests_version
 from cache.etags import make_etag, check_etag
-from crud.dashboard_metrics import refresh_requests_metrics
+
 
 
 R2_BUCKET = settings.R2_BUCKET

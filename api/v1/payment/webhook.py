@@ -4,16 +4,17 @@ from decimal import Decimal
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Request , HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 from crud.payment import get_payment_by_hash, mark_payment_as_failed, mark_payment_as_paid
-from crud.dashboard_metrics import refresh_payment_metrics
 from crud.subscriptions import create_subscription
+from crud.user import get_user_by_id
+from crud.subscriptions import get_subscription_by_id
+from crud.plan import get_plan_by_id
 from database.session import get_db
 from email_service import send_plan_update_email
-from models.user import User  
-from models.plan import Plan
-from models.subscription import Subscription  
+
+
 
 
 log = logging.getLogger(__name__)
@@ -31,16 +32,12 @@ class HesabeWebhook(BaseModel):
 
 
 @router.post("/hesabe")
-async def hesabe_hook(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
+async def hesabe_hook(request: Request,background_tasks: BackgroundTasks,db: AsyncSession = Depends(get_db),):
     try:
         try:
             payload = HesabeWebhook.model_validate_json(await request.body())
         except ValidationError:
-            db.rollback()
+            await db.rollback()
             log.warning("Ignoring malformed Hesabe webhook")
             return {"ok": True}
 
@@ -66,7 +63,7 @@ async def hesabe_hook(
         enquiry = response.json()["data"]
 
 
-        payment = get_payment_by_hash(db, enquiry["reference_number"])
+        payment = await get_payment_by_hash(db, enquiry["reference_number"])
         if payment is None:
             raise ValueError("Payment not found")
 
@@ -83,7 +80,7 @@ async def hesabe_hook(
 
         if enquiry["status"] != "SUCCESSFUL":
             if enquiry["status"] in {"FAILED", "DECLINED"}:
-                mark_payment_as_failed(db, payment.gateway_token)  # type: ignore
+                await mark_payment_as_failed(db, payment.gateway_token)  
             else:
                 log.info("Hesabe payment %s is not final: %s", payment.payment_hash, enquiry["status"])
             return {"ok": True}
@@ -91,49 +88,56 @@ async def hesabe_hook(
 
         carry = 0
 
-        user = db.get(User, payment.user_id)
-        if user.current_subscription_id :  # type: ignore
-            current_subscription = db.get(Subscription, user.current_subscription_id)  # type: ignore
-            current_subscription.status = "canceled"  # type: ignore
-            if current_subscription.plan_id == payment.plan_id:# type: ignore
-                carry = max(0, (current_subscription.end_date - date.today()).days)  # type: ignore
+        user = await get_user_by_id(db,payment.user_id)
+        if not user:
+            raise ValueError("user not found")
+        
+        if user.current_subscription_id :  
+            current_subscription = await get_subscription_by_id(db,user.current_subscription_id) 
+            if not current_subscription:
+                raise ValueError("subscription not found") 
+            current_subscription.status = "canceled"  
+            if current_subscription.plan_id == payment.plan_id:
+                carry = max(0, (current_subscription.end_date - date.today()).days)  
 
 
 
 
         end_date = date.today() + timedelta(
-            days=365 + carry if payment.billing_cycle == "yearly" else 30 + carry  # type: ignore
+            days=365 + carry if payment.billing_cycle == "yearly" else 30 + carry 
         )
 
 
-        subscription = create_subscription(
+        subscription = await create_subscription(
             db=db,
-            user_id=payment.user_id,  # type: ignore
-            plan_id=payment.plan_id,  # type: ignore
-            payment_id=payment.id,  # type: ignore
+            user_id=payment.user_id, 
+            plan_id=payment.plan_id, 
+            payment_id=payment.id, 
             end_date=end_date,
             commit=False,
         )
-        plan = db.get(Plan, subscription.plan_id)
 
-        amount = plan.price_yearly if payment.billing_cycle == "yearly" else plan.price_monthly  # type: ignore
+        plan = await get_plan_by_id(db,subscription.plan_id)
+        if not plan:
+            raise ValueError("plan not found")
+        
+        amount = plan.price_yearly if payment.billing_cycle == "yearly" else plan.price_monthly 
 
-        mark_payment_as_paid(db, payment.gateway_token, commit=False)  # type: ignore
-        db.flush()
-        refresh_payment_metrics(db)
-
+        await mark_payment_as_paid(db, payment.gateway_token, commit=False) 
+        await db.flush()
+        
         background_tasks.add_task(
             send_plan_update_email,
-            user.email,  # type: ignore
-            user.first_name,  # type: ignore
-            plan.name,  # type: ignore
+            user.email, 
+            user.first_name or "user",
+            plan.name, 
             amount,
-            payment.billing_cycle,  # type: ignore
-            payment.gateway_token,  # type: ignore
+            payment.billing_cycle, 
+            payment.gateway_token, 
         )
 
 
         return {"ok": True}
     except Exception:
-        db.rollback()
+        await db.rollback()
         raise

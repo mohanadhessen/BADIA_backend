@@ -4,7 +4,7 @@ from database.session import get_db
 from api.dependencies import require_admin
 from api.rate_limiter import limiter
 from crud.user import admin_get_all_users, get_users_plans_distribution
-from crud.review import admin_get_all_review
+from crud.review import admin_get_all_reviews
 from crud.request import admin_get_all_requests
 from crud.payment import admin_get_all_payments
 from crud.plan import get_all_plans
@@ -78,7 +78,7 @@ def get_dashboard_data(
 
     plans_distribution = get_users_plans_distribution(db=db)
 
-    reviews_data = admin_get_all_review(
+    reviews_data = admin_get_all_reviews(
         db=db,
         page=reviews_page,
         limit=reviews_limit,

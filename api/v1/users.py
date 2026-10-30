@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request , Response
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.user import UserUpdate, UserPasswordReset
 from database.session import get_db 
 from api.dependencies import get_current_user, require_admin
@@ -11,64 +11,38 @@ from cache.user import get_user_version , bump_user_version , bump_global_users_
 from cache.etags import make_etag , check_etag
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from crud.dashboard_metrics import refresh_user_metrics
-from models.subscription import Subscription
-from models.plan import Plan
+from crud.subscriptions import get_user_subscription_by_user_id
 
 router = APIRouter(tags=["Users"])
 
 
 
 
-
-
 @router.get("/me")
 @limiter.limit("60/minute")
-def get_user_profile(
-    request: Request,
-    response: Response,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-
+async def get_user_profile(request: Request,response: Response,current_user: User = Depends(get_current_user),db: AsyncSession = Depends(get_db)):
 
     version = get_user_version(current_user.id)
     if version == 0:
         bump_user_version(current_user.id)
         version = 1
     
-    sub = None
-    if current_user.current_subscription_id:
-        current_subscription = db.query(Subscription).filter(Subscription.id == current_user.current_subscription_id).first()
-        if current_subscription:
-            plan = db.query(Plan).filter(Plan.id == current_subscription.plan_id).first()
-            sub = {
-                "start_date": current_subscription.start_date,
-                "end_date": current_subscription.end_date,
-                "status": current_subscription.status,
-                "plan": {
-                    "id": plan.id,
-                    "name": plan.name,
-                    "price_monthly": plan.price_monthly,
-                    "price_yearly": plan.price_yearly,
-                    "plan_details": plan.plan_details,
-                } if plan else None,
-            }
 
-    etag_source = (
-        f"{version}_{current_user.role}_{current_user.is_email_verified}_"
-        f"{current_user.updated_at}_{current_user.current_subscription_id}_"
-        f"{sub['status'] if sub else None}_{sub['end_date'] if sub else None}"
-    )
-    etag = make_etag(etag_source)
+        
+    etag = make_etag(f"{version}_{current_user.updated_at}")
     if check_etag(request, response, etag):
-        return []
+        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, no-cache"})
+
+    sub = {}
+    if current_user.current_subscription_id:
+        sub = await get_user_subscription_by_user_id(db,current_user.id)
+
 
     data = {
         "status": "success",
         "user_info": {
             "id": current_user.id,
-            "hashId": current_user.hashId,
+            "hashId": current_user.hash_id,
             "email": current_user.email,
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
@@ -89,12 +63,7 @@ def get_user_profile(
 
 @router.patch("/me")
 @limiter.limit("10/minute")
-def update_user_profile(
-    request: Request,
-    user_data: UserUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def update_user_profile(request: Request,user_data: UserUpdate,current_user: User = Depends(get_current_user),db: AsyncSession = Depends(get_db)):
     
     update_dict = user_data.model_dump(exclude_unset=True)
     
@@ -108,11 +77,7 @@ def update_user_profile(
     bump_user_version(current_user.id)
 
 
-    updated_user = update_user_data(
-        db=db, 
-        email=current_user.email, 
-        update_data=update_dict
-    )
+    updated_user = await update_user_data(db=db, email=current_user.email, update_data=update_dict)
     
     if not updated_user:
         raise HTTPException(
@@ -120,7 +85,7 @@ def update_user_profile(
             detail="User not found"
         )
 
-    refresh_user_metrics(db)
+    
     return {
         "status": "success",
         "user_info": {
@@ -140,12 +105,7 @@ def update_user_profile(
 
 @router.post("/me/password")
 @limiter.limit("5/minute")
-def reset_user_password(
-    request: Request,
-    password_data: UserPasswordReset,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def reset_user_password(request: Request,password_data: UserPasswordReset,current_user: User = Depends(get_current_user),db: AsyncSession = Depends(get_db)):
     if not current_user.password_hash or not verify_password(password_data.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -161,7 +121,7 @@ def reset_user_password(
             detail="Could not update password"
         )
 
-    refresh_user_metrics(db)
+
     return {
         "status": "success",
         "message": "Password updated successfully"
@@ -170,10 +130,12 @@ def reset_user_password(
 
 @router.delete("/me")
 @limiter.limit("3/minute")
-def delete_user_profile(
+
+
+async def delete_user_profile(
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     if not current_user:
         raise HTTPException(
@@ -190,7 +152,7 @@ def delete_user_profile(
             detail="User could not be deleted or does not exist"
         )
 
-    refresh_user_metrics(db)
+
     return {
         "status": "success",
         "message": "User account deleted successfully",
@@ -211,13 +173,13 @@ class AdminUserCreate(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
-def create_user_by_admin(
+async def create_user_by_admin(
     request: Request,
     user_in: AdminUserCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin)
 ):
-    existing_user = get_user_by_email(db, user_in.email)
+    existing_user = await get_user_by_email(db, user_in.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -230,7 +192,7 @@ def create_user_by_admin(
         raw_password = secrets.token_urlsafe(12)
         
     try:
-        new_user = create_new_user(
+        new_user = await create_new_user(
             db=db,
             first_name=user_in.first_name,
             last_name=user_in.last_name,
@@ -241,14 +203,13 @@ def create_user_by_admin(
         )
         
         new_user.is_email_verified = True
-        db.commit()
+        await db.commit()
         
         bump_global_users_version()
         
-        refresh_user_metrics(db)
         return {
             "status": "success",
-            "message": "User created successfully",
+            "message": "User created successfully",   
             "user": {
                 "id": new_user.id,
                 "email": new_user.email,
@@ -263,7 +224,7 @@ def create_user_by_admin(
             }
         }
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error during user creation: {str(e)}",

@@ -2,8 +2,8 @@ import sentry_sdk
 import resend
 from config import settings
 from datetime import datetime,timezone
-from database.session import SessionLocal
-from crud.metrics import log_email_sent
+from database.session import AsyncSessionLocal
+from crud.metrics import create_email_log
 import html
 
 
@@ -11,15 +11,19 @@ import html
 resend.api_key = settings.RESEND_API_KEY
 FRONTEND_ACCOUNT_URL = settings.FRONTEND_ACCOUNT_URL
 
-def _log_email(email: str, subject: str):
-    db = SessionLocal()
+async def log_email(email: str, subject: str):
+    db = AsyncSessionLocal()
     try:
-        log_email_sent(db, email, subject)
+        await create_email_log(db, email, subject)
     except Exception as e:
         sentry_sdk.capture_exception(e)
     finally:
-        db.close()
-def send_verification_email(email: str, token: str):
+        await db.close()
+
+
+
+
+async def send_verification_email(email: str, token: str):
     verify_url = f"{FRONTEND_ACCOUNT_URL}/verify_email_page.html?token={token}"
 
     html = f"""
@@ -55,13 +59,13 @@ def send_verification_email(email: str, token: str):
             "subject": "Verify your email",
             "html": html
         })
-        _log_email(email, "Verify your email")
+        await log_email(email, "Verify your email")
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
         return None
 
-def send_password_reset_email(email: str, token: str):
+async def send_password_reset_email(email: str, token: str):
     reset_url = f"{FRONTEND_ACCOUNT_URL}/reset_password_page.html?token={token}"
 
     html = f"""
@@ -97,7 +101,7 @@ def send_password_reset_email(email: str, token: str):
             "subject": "Password Reset",
             "html": html
         })
-        _log_email(email, "Password Reset")
+        await log_email(email, "Password Reset")
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -106,9 +110,8 @@ def send_password_reset_email(email: str, token: str):
 
 
 
-def send_request_status_email(email: str, user_name: str, service_type: str, is_approved: str):
-    user_name = html.escape(user_name)
-    service_type = html.escape(service_type)
+async def send_request_status_email(email: str, user_name: str, service_type: str, is_approved: str):
+
     if is_approved == "approved":
         page_title = "Request Approved"
         icon_bg = "#e8f5e2"
@@ -284,20 +287,20 @@ def send_request_status_email(email: str, user_name: str, service_type: str, is_
             "subject": subject,
             "html": html,
         })
-        _log_email(email, subject)
+        await log_email(email, subject)
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
         return None
 
 
-def send_plan_update_email(
+async def send_plan_update_email(
     email: str,
     user_name: str,
     plan_name: str,
     amount,
     billing_cycle: str,
-    transaction_id: str = None,
+    transaction_id: str ,
 ):
     user_name = html.escape(user_name)
     plan_name = html.escape(plan_name)
@@ -431,19 +434,18 @@ def send_plan_update_email(
             "subject": f"Plan Updated — {plan_name} is now active",
             "html": html_body,
         })
-        _log_email(email, f"Plan Updated — {plan_name} is now active")
+        await log_email(email, f"Plan Updated — {plan_name} is now active")
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
         return None
 
-def send_plan_cancelled_by_admin_email(
+async def send_plan_cancelled_by_admin_email(
     email: str,
     user_name: str,
     plan_name: str,
 ):
-    user_name = html.escape(user_name)
-    plan_name = html.escape(plan_name)
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     html = f"""
@@ -560,14 +562,14 @@ def send_plan_cancelled_by_admin_email(
             "subject": f"Your {plan_name} Subscription Has Been Cancelled",
             "html": html,
         })
-        _log_email(email, f"Your {plan_name} Subscription Has Been Cancelled")
+        await log_email(email, f"Your {plan_name} Subscription Has Been Cancelled")
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
         return None
 
 
-def send_contact_form_email(name: str, visitor_email: str, phone: str, message: str):
+async def send_contact_form_email(name: str, visitor_email: str, phone: str, message: str):
     name = html.escape(name)
     visitor_email = html.escape(visitor_email)
     phone_display = html.escape(phone) if phone else "—"
@@ -672,7 +674,7 @@ def send_contact_form_email(name: str, visitor_email: str, phone: str, message: 
             "subject": f"Website Contact Form - {name}",
             "html": email_html ,
         })
-        _log_email("info@badiaprojectmanagement.com", f"Website Contact Form - {name}")
+        await log_email("info@badiaprojectmanagement.com", f"Website Contact Form - {name}")
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -683,7 +685,7 @@ def send_contact_form_email(name: str, visitor_email: str, phone: str, message: 
 
 
 
-def send_plan_expiry_reminder_email(
+async def send_plan_expiry_reminder_email(
         
         
     email: str,
@@ -836,7 +838,7 @@ def send_plan_expiry_reminder_email(
             "subject": subject,
             "html": html_body,
         })
-        _log_email(email, subject)
+        await log_email(email, subject)
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -845,7 +847,7 @@ def send_plan_expiry_reminder_email(
     
 
 
-def send_plan_expiry_email(
+async def send_plan_expiry_email(
     email: str,
     user_name: str,
     plan_name: str,
@@ -995,7 +997,7 @@ def send_plan_expiry_email(
             "subject": subject,
             "html": html_body,
         })
-        _log_email(email, subject)
+        await log_email(email, subject)
         return res
     except Exception as e:
         sentry_sdk.capture_exception(e)

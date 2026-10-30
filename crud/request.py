@@ -1,78 +1,55 @@
-from fastapi import HTTPException
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession 
 from models.request import Request
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select 
+from crud.user import get_user_by_email
 import uuid
-from crud.dashboard_metrics import refresh_requests_metrics
-from crud.dashboard_metrics import refresh_requests_metrics, get_dashboard_metrics
+import asyncio
 
-def get_existing_request(db: Session, user_id: int, service_type: str) -> Request | None:
-    return db.query(Request).filter(
-        Request.user_id == user_id,
-        Request.service_type == service_type
-    ).first()
+async def get_existing_request(db: AsyncSession, user_id: int, service_type: str) -> Request | None:
+    result = await db.execute(select(Request).where(Request.user_id == user_id , Request.service_type == service_type,))
+    return result.scalar_one_or_none()
 
 
-
-def create_request(db: Session, user_id: int, service_type: str) -> Request:
-    request = Request(
+async def create_request(db: AsyncSession, user_id: int, service_type: str) -> Request:
+    new_request = Request(
         user_id=user_id,
         request_id=str(uuid.uuid4()),
         service_type=service_type,
         status="pending"
     )
-    db.add(request)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, "You already have a request for this service")
-    db.refresh(request)
-    refresh_requests_metrics(db)
-    return request
+    db.add(new_request)
+    await db.commit()
+    await db.refresh(new_request)
+    return new_request
 
-
-def get_request_by_id(db: Session, request_id: str) -> Request | None:
-    return db.query(Request).filter(Request.id == request_id).first()
-
-
-def get_user_requests(db: Session, user_id: int):
-
-    return (
-        db.query(Request)
-        .options(joinedload(Request.files))
-        .filter(Request.user_id == user_id)
-        .order_by(Request.created_at.desc())
-        .all()
-    )
-
-
-def get_requests_by_user_email(db: Session, email: str):
-    from models.user import User
-    return (
-        db.query(Request)
-        .join(User, Request.user_id == User.id)
-        .filter(User.email == email)
-        .options(joinedload(Request.user), joinedload(Request.files))
-        .order_by(Request.created_at.desc())
-        .all()
-    )
+async def get_request_by_id(db: AsyncSession, request_id: str) -> Request | None:
+    result = await db.execute(select(Request).where(Request.id == request_id))
+    return result.scalar_one_or_none()
 
 
 
-def update_request_status(
-    db: Session,
-    request_id: str,
-    new_status: str
-) -> Request | None:
-    request = get_request_by_id(db, request_id)
+async def get_user_requests(db: AsyncSession, user_id: int)->list[Request]:
+    result = await db.execute(select(Request).where(Request.user_id == user_id))
+    return list(result.scalars().all())
+  
+
+
+async def get_requests_by_user_email(db: AsyncSession, email: str)->list[Request]:
+    user = await  get_user_by_email(db,email)
+    if not user:
+        raise ValueError("User not found")
+    result = await db.execute(select(Request).where(Request.user_id == user.id))
+    return list(result.scalars().all())
+
+
+
+async def update_request_status(  db: AsyncSession, request_id: str, new_status: str) -> Request | None:
+    request = await get_request_by_id(db, request_id)
     if not request:
-        return None
+        raise ValueError("request not found")
     request.status = new_status
-    db.commit()
-    db.refresh(request)
-    refresh_requests_metrics(db)
+    await db.commit()
+    await db.refresh(request)
     return request
 
 
@@ -80,157 +57,29 @@ def update_request_status(
 
 
 
-def delete_s3_file(s3, bucket: str, key: str):
+async def delete_s3_file(s3, bucket: str, key: str):  
     if not key:
-        return
-
-    s3.delete_object(
-        Bucket=bucket,
-        Key=key
-    )
+        return  
+    await asyncio.to_thread(
+    delete_s3_file,s3,bucket, key,)
 
 
 
-
-def delete_request(
-    db: Session,
-    request_id: str,
-    s3,
-    bucket: str
-):
-    request = get_request_by_id(db, request_id)
-
+async def delete_request( db: AsyncSession,request_id: str,s3,bucket: str):
+    request = await get_request_by_id(db, request_id)
     if not request:
-        return None
+        raise ValueError("request not found")
 
     file_keys = [f.file_key for f in request.files if f.file_key]
 
     for key in file_keys:
-        delete_s3_file(
-            s3=s3,
-            bucket=bucket,
-            key=key
-        )
+        await delete_s3_file(s3=s3,bucket=bucket,key=key)
 
-    db.delete(request)
-    db.commit()
-    refresh_requests_metrics(db)
+    await db.delete(request)
+    await db.commit()
 
-    return {
-        "request_id": request_id,
-        "deleted_files": len(file_keys)
-    }
+
+    return {"request_id": request_id,  "deleted_files": len(file_keys)}
 
 
 
-def admin_get_all_requests(
-    db: Session,
-    page: int = 1,
-    limit: int = 25,
-    q: str | None = None,
-    type: str | None = None,
-    status: str | None = None,
-    plan: str | None = None,
-    sort: str = "newest",
-):
-    from sqlalchemy import or_
-    from models.user import User
-    from models.plan import Plan
-    from models.subscription import Subscription
-    offset = (page - 1) * limit
-
-    query = db.query(Request).join(User, Request.user_id == User.id)
-    
-    if type:
-        query = query.filter(Request.service_type == type)
-    if status:
-        query = query.filter(Request.status == status)
-    if plan:
-        query = (
-            query.join(
-                Subscription,
-                User.current_subscription_id == Subscription.id,
-            )
-            .join(Plan, Subscription.plan_id == Plan.id)
-            .filter(Plan.name == plan)
-        )
-        
-    if q:
-        search_filters = [
-            User.email.ilike(f"%{q}%"),
-            User.first_name.ilike(f"%{q}%"),
-            User.last_name.ilike(f"%{q}%"),
-            Request.service_type.ilike(f"%{q}%"),
-            Request.id.ilike(f"%{q}%"),
-        ]
-        # full name search simulation
-        search_filters.append((User.first_name + " " + User.last_name).ilike(f"%{q}%"))
-        query = query.filter(or_(*search_filters))
-        
-    if sort == "oldest":
-        query = query.order_by(Request.created_at.asc())
-    else:
-        query = query.order_by(Request.created_at.desc())
-
-    requests_plus_one = (
-        query
-        .options(
-            joinedload(Request.user),
-            joinedload(Request.files)
-        )
-        .offset(offset)
-        .limit(limit + 1)
-        .all()
-    )
-
-    has_next = len(requests_plus_one) > limit
-    requests = requests_plus_one[:limit]
-
-    items = [
-        {
-            "request_id": r.id,
-            "user_id": r.user_id,
-            "service_type": r.service_type,
-            "status": r.status,
-            "created_at": r.created_at,
-            "updated_at": r.updated_at,
-
-            "user": {
-                "id": r.user.id,
-                "email": r.user.email,
-                "first_name": r.user.first_name,
-                "last_name": r.user.last_name,
-                "company_name": r.user.company_name,
-                "phone": r.user.phone,
-            } if r.user else None,
-
-            "files": [
-                {
-                    "id": f.id,
-                    "file_id": f.file_id,
-                    "filename": f.filename,
-                    "file_key": f.file_key,
-                    "content_type": f.content_type,
-                    "size": f.size,
-                    "created_at": f.created_at,
-                }
-                for f in r.files
-            ]
-        }
-        for r in requests
-    ]
-
-    metrics_row = get_dashboard_metrics(db)
-
-    return {
-        "metrics": {
-            "total_requests": metrics_row.get("total_requests", 0) if metrics_row else 0,
-            "pending_requests": metrics_row.get("pending_requests", 0) if metrics_row else 0,
-            "approved_requests": metrics_row.get("approved_requests", 0) if metrics_row else 0,
-            "rejected_requests": metrics_row.get("rejected_requests", 0) if metrics_row else 0
-        },
-        "page": page,
-        "limit": limit,
-        "has_next": has_next,
-        "items": items
-    }

@@ -1,50 +1,44 @@
-from datetime import date, timedelta
-
 from models.payment import Payment 
-from models.user import User
-from models.plan import Plan
-from sqlalchemy.orm import Session , joinedload
-from sqlalchemy import or_
-from schemas.payment import PaymentBase, PaymentCheckoutRequest, PaymentUpdate
-from crud.dashboard_metrics import refresh_payment_metrics, get_dashboard_metrics
-from crud.subscriptions import create_subscription
+from sqlalchemy.ext.asyncio import AsyncSession 
+from sqlalchemy import select
+from schemas.payment import  PaymentCheckoutRequest
+
+from crud.user import get_user_by_id
+from crud.plan import get_plan_by_id
 
 
 
 
 
 
-
-# todo create these two functions : get_payment_by_user_id, get_payments_by_user_email
-
-
-
-def get_pending_payments(db: Session):
-    return db.query(Payment).filter(
-        Payment.status == "pending",
-        Payment.source == "paymentgateway",
-    )
+async def get_payment_py_id(db: AsyncSession,payment_id:int):
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    return result.scalar_one_or_none()
+    
 
 
-
-def get_payment_by_hash(db: Session, payment_hash: str) -> Payment | None:
-    return (
-        db.query(Payment)
-        .filter(Payment.payment_hash == payment_hash,
-                Payment.source == "paymentgateway")
-        .with_for_update()
-        .first()
-    )
+async def get_pending_payments(db: AsyncSession):
+    result = await db.execute(select(Payment).where(Payment.status == "pending" , Payment.source == "paymentgateway"))
+    return result.scalars().all()
 
 
 
+async def get_payment_by_hash(db: AsyncSession, payment_hash: str) -> Payment | None:
+    result = await db.execute(select(Payment).where(Payment.payment_hash == payment_hash , Payment.source == "paymentgateway"))
+    return result.scalar_one_or_none()
 
-def create_payment_gateaway(db: Session, data: PaymentCheckoutRequest, billing_cycle: str,user_id:int):
-    user = db.query(User).filter(User.id == user_id).first()
+
+async def get_payment_by_gateway_token(db: AsyncSession, gateway_token: str):
+    result = await db.execute(select(Payment).where(Payment.gateway_token == gateway_token))
+    return result.scalar_one_or_none()
+
+
+async def create_payment(db: AsyncSession, data: PaymentCheckoutRequest, billing_cycle: str,user_id:int):
+    user = await get_user_by_id(db,user_id)
     if not user:
         raise ValueError("User not found")
 
-    plan = db.query(Plan).filter(Plan.id == data.plan_id).first()
+    plan = await get_plan_by_id(db,data.plan_id)
     if not plan:
         raise ValueError("Plan not found")
 
@@ -66,40 +60,40 @@ def create_payment_gateaway(db: Session, data: PaymentCheckoutRequest, billing_c
 
     db.add(payment)
 
-    db.commit()
-    db.refresh(payment)
-    refresh_payment_metrics(db)
+    await db.commit()
+    await db.refresh(payment)
+
 
     return payment
 
 
-def mark_payment_as_paid(db: Session, gateway_token: str, commit: bool = True):
-    payment = db.query(Payment).filter(Payment.gateway_token == gateway_token).first()
+async def mark_payment_as_paid(db: AsyncSession, gateway_token: str, commit: bool = True):
+    payment = await get_payment_by_gateway_token(db,gateway_token)
     if not payment:
         raise ValueError("Payment not found")
 
 
     payment.status = "paid"
     if commit:
-        db.commit()
-        db.refresh(payment)
-        refresh_payment_metrics(db)
+        await db.commit()
+        await db.refresh(payment)
+
     else:
-        db.flush()
+        await db.flush()
 
     return payment
 
 
-def mark_payment_as_failed(db: Session, gateway_token: str):
-    payment = db.query(Payment).filter(Payment.gateway_token == gateway_token).first()
+async def mark_payment_as_failed(db: AsyncSession, gateway_token: str):
+    payment = await get_payment_by_gateway_token(db,gateway_token)
     if not payment:
         raise ValueError("Payment not found")
 
 
-    payment.status = "failed"# type: ignore
-    db.commit()
-    db.refresh(payment)
-    refresh_payment_metrics(db)
+    payment.status = "failed" 
+    await db.commit()
+    await db.refresh(payment)
+
 
     return payment
 
@@ -107,132 +101,3 @@ def mark_payment_as_failed(db: Session, gateway_token: str):
 
 
 
-def create_payment_admin(db: Session, data: PaymentBase, billing_cycle: str):
-    user = db.query(User).filter(User.id == data.user_id).first()
-    if not user:
-        raise ValueError("User not found")
-
-    plan = db.query(Plan).filter(Plan.id == data.plan_id).first()
-    if not plan:
-        raise ValueError("Plan not found")
-
-    if billing_cycle == "monthly":
-        amount = plan.price_monthly
-    elif billing_cycle == "yearly":
-        amount = plan.price_yearly
-    else:
-        raise ValueError("Invalid billing cycle")
-
-    payment = Payment(
-        user_id=data.user_id,
-        plan_id=data.plan_id,
-        amount=amount,
-        billing_cycle=billing_cycle,
-        status="paid",  
-        source="manual"
-    )
-
-    db.add(payment)
-
-    db.commit()
-    db.refresh(payment)
-    end_date = date.today() + timedelta(days=365 if billing_cycle == "yearly" else 30)
-    create_subscription(
-        db=db,
-        user_id=user.id,  # type: ignore
-        plan_id=plan.id,
-        payment_id=payment.id,
-        end_date=end_date,
-    )
-    refresh_payment_metrics(db)  # type: ignore
-
-    return payment
-
-
-
-def admin_update_manual_payment(db: Session, payment_id: int, data: PaymentUpdate):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if not payment:
-        raise ValueError("Payment not found")
-
-    if data.status:
-        payment.status = data.status
-
-    db.commit()
-    db.refresh(payment)
-    refresh_payment_metrics(db)
-
-    return payment
-
-
-
-
-def admin_get_all_payments(
-    db: Session,
-    page: int = 1,
-    limit: int = 25,
-    q: str | None = None,
-    status: str | None = None,
-    sort: str = "newest",
-):
-    offset = (page - 1) * limit
-
-    query = (
-        db.query(Payment)
-        .join(Payment.user)
-        .join(Payment.plan)
-        .options(
-            joinedload(Payment.user),
-            joinedload(Payment.plan)
-        )
-    )
-
-    if status:
-        query = query.filter(Payment.status == status)
-
-    if q:
-        search_filters = [
-            User.email.ilike(f"%{q}%"),
-            User.first_name.ilike(f"%{q}%"),
-            User.last_name.ilike(f"%{q}%"),
-            Plan.name.ilike(f"%{q}%"),
-        ]
-        if q.isdigit():
-            search_filters.append(Payment.id == int(q))
-
-        query = query.filter(or_(*search_filters))
-
-    if sort == "oldest":
-        query = query.order_by(Payment.created_at.asc())
-    else:  # default / "newest"
-        query = query.order_by(Payment.created_at.desc())
-
-    payments_plus_one = (
-        query
-        .offset(offset)
-        .limit(limit + 1)
-        .all()
-    )
-
-    has_next = len(payments_plus_one) > limit
-    payments = payments_plus_one[:limit]
-
-    metrics_row = get_dashboard_metrics(db)
-
-    return {
-        "metrics": {
-            "total_payments": metrics_row.get("total_payments", 0) if metrics_row else 0,
-            "paid_payments": metrics_row.get("paid_payments", 0) if metrics_row else 0,
-            "rejected_payments": metrics_row.get("rejected_payments", 0) if metrics_row else 0,
-            "canceled_payments": metrics_row.get("canceled_payments", 0) if metrics_row else 0,
-            "monthly_payments": metrics_row.get("monthly_payments", 0) if metrics_row else 0,
-            "yearly_payments": metrics_row.get("yearly_payments", 0) if metrics_row else 0,
-            "payments_this_month": metrics_row.get("payments_this_month", 0) if metrics_row else 0,
-            "total_revenue": float(metrics_row.get("total_revenue", 0)) if metrics_row else 0.0,
-            "revenue_this_month": float(metrics_row.get("revenue_this_month", 0)) if metrics_row else 0.0,
-        },
-        "page": page,
-        "limit": limit,
-        "has_next": has_next,
-        "items": payments
-    }

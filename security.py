@@ -70,7 +70,7 @@ def verify_refresh_token(token: str) -> dict:
             algorithms=[ALGORITHM]
         )
         
-        # Enforce type constraints to block access tokens from exploiting this path
+
         if payload.get("type") != "refresh":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

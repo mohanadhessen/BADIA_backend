@@ -10,10 +10,7 @@ serializer = URLSafeTimedSerializer(settings.TOKEN_SECRET_KEY)
 
 
 def create_email_verification_token(email: str):
-    try:
-        return serializer.dumps(email, salt="email-verify")
-    except Exception:
-        return None
+   return serializer.dumps(email, salt="email-verify")
 
 
 def verify_email_token(token: str, max_age=3600):
@@ -28,10 +25,8 @@ def verify_email_token(token: str, max_age=3600):
 
 
 def create_password_reset_token(email: str):
-    try:
-        return serializer.dumps(email, salt="password-reset")
-    except Exception:
-        return None
+    return serializer.dumps(email, salt="password-reset")
+
 
 
 def verify_password_reset_token(token: str, max_age=3600):
